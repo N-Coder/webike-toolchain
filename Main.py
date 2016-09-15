@@ -50,7 +50,7 @@ for imei in IMEIS:
             initial_soc.append(float(first_sample['ChargingCurr']))  # TODO fix range
         if last_sample['ChargingCurr'] is not None:
             final_soc.append(float(last_sample['ChargingCurr']))  # TODO fix range
-        for key, val in weather.items():
+        for key, val in weather_sample.items():
             append_hist(weather, key, val)
 
 connection.close()

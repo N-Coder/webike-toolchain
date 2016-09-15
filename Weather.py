@@ -39,12 +39,12 @@ def download_data():
     for year in range(2014, datetime.now().year + 1):
         for month in range(1, 12 + 1):
             file = '{}{}-{}.csv'.format(download_dir, year, month)
-            files.append(file)
             end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=+1)
 
             if datetime(year=year, month=month, day=1) > datetime.now():  # don't download future months
                 continue
 
+            files.append(file)
             if os.path.exists(file):
                 mtime = datetime.fromtimestamp(os.path.getmtime(file))
                 if mtime > end_of_month:
@@ -60,7 +60,7 @@ def download_data():
                 "http://climate.weather.gc.ca/climate_data/bulk_data_e.html?"
                 "format=csv&stationID=48569&Year={year}&Month={month}&Day=1&timeframe=1&submit= Download+Data"
                     .format(year=year, month=month),
-                out=file)
+                out=file, bar=None)
     print('Download complete, got {} files'.format(len(files)))
     return files
 
