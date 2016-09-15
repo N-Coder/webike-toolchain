@@ -182,7 +182,7 @@ def extract_hist(data):
 
 
 def append_hist(hist_data, key, val):
-    if val is not None:
+    if val is not None and key in hist_data:
         if isinstance(val, Decimal):
             hist_data[key].append(float(val))
         else:

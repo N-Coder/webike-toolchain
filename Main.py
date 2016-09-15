@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pymysql
 
 from Constants import IMEIS
-from Weather import append_hist, plot_weather
+from Weather import append_hist, plot_weather, SQL_COLUMNS
 
 __author__ = 'Niko Fink'
 
@@ -21,8 +21,9 @@ start_times = []
 distances = []
 initial_soc = []
 final_soc = []
-weather = {'wind_speed': [], 'weather': [], 'wind_dir': [], 'wind_chill': [], 'hmdx': [], 'stn_press': [],
-           'visibility': [], 'temp': [], 'rel_hum': [], 'dew_point': []}
+weather = {}
+for col in SQL_COLUMNS:
+    weather[col] = []
 
 for imei in IMEIS:
     print('Processing IMEI ' + imei)
