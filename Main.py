@@ -1,10 +1,10 @@
 import os
-from decimal import Decimal
 
 import matplotlib.pyplot as plt
 import pymysql
 
-from Constants import IMEIS, plot_weather
+from Constants import IMEIS
+from Weather import append_hist, plot_weather
 
 __author__ = 'Niko Fink'
 
@@ -50,12 +50,8 @@ for imei in IMEIS:
             initial_soc.append(float(first_sample['ChargingCurr']))  # TODO fix range
         if last_sample['ChargingCurr'] is not None:
             final_soc.append(float(last_sample['ChargingCurr']))  # TODO fix range
-        for key, value in weather.items():
-            if weather_sample[key] is not None:
-                if isinstance(weather_sample[key], Decimal):
-                    value.append(float(weather_sample[key]))
-                else:
-                    value.append(weather_sample[key])
+        for key, val in weather.items():
+            append_hist(weather, key, val)
 
 connection.close()
 
