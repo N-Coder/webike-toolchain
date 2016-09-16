@@ -1,14 +1,12 @@
 import csv
 import os
 import sys
-import warnings
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pymysql
 import wget
 from dateutil.relativedelta import relativedelta
 
@@ -120,7 +118,7 @@ def __clean_csv_value(k_v):
 def write_data_db(cursor, csv_data):
     print('Writing data to DB')
 
-    cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
+    cursor.execute("SELECT datetime FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
     db_latest = cursor.fetchone()['datetime']
     cursor.execute("SELECT COUNT(*) AS count FROM webike_sfink.weather")
     db_count = cursor.fetchone()['count']
@@ -168,7 +166,6 @@ def write_data_db(cursor, csv_data):
                 print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
                       .format(insert_cnt, skip_cnt, existing_cnt))
 
-        connection.commit()
         print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
               .format(insert_cnt, skip_cnt, existing_cnt))
         print('{} of {} rows from csv parsed'
@@ -179,6 +176,7 @@ def write_data_db(cursor, csv_data):
         assert insert_cnt + existing_cnt == len(db_data)
         assert existing_cnt == db_count
 
+        connection.commit()
         return db_data
     except:
         connection.rollback()
@@ -243,15 +241,7 @@ def plot_weather(hist_data, out_file=None, fig_offset=None, label_prefix="", **k
 
 
 if __name__ == "__main__":
-    connection = pymysql.connect(
-        host="tornado.cs.uwaterloo.ca",
-        port=3306,
-        user=os.environ['MYSQL_USER'],
-        passwd=os.environ['MYSQL_PASSWORD'],
-        db="webike"
-    )
-    cursor = connection.cursor(pymysql.cursors.DictCursor)
-    warnings.filterwarnings('error', category=pymysql.Warning)
+    from DB import cursor, connection
 
     files = download_data()
     csv_data = parse_data(files)
