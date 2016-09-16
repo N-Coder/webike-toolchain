@@ -1,14 +1,43 @@
+import pickle
 from datetime import datetime
+
+import matplotlib.pyplot as plt
+import pymysql
 
 from soc import SOC
 from soc.databaseConnector import *
 
 
-def getSOCEstimation(dbc, imei, sMonth, sDay, sYear):
-    startDate = datetime(sYear, sMonth, sDay)
-    s = startDate.strftime('%y-%m-%d') + " 00:00:00"
-    e = startDate.strftime('%y-%m-%d') + " 23:59:59"
+def choose_temp(t):
+    return min([-20, -10, 0, 23, 45], key=lambda x: abs(x - t))
 
+
+def getSOCEstimation2(cursor, imei, start, end):
+    # Select relevant data points
+    cursor.execute(
+        "SELECT Stamp AS time, BatteryVoltage AS volt, TempBattery AS temp FROM imei{} "
+        "WHERE Stamp >= '{}' AND Stamp <= '{}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0 "
+        "ORDER BY Stamp".format(imei, start, end))
+    socs = cursor.fetchall()
+
+    # Smooth voltage by 95%
+    socs[0]['volt_smooth'] = socs[0]['volt']
+    for prev, cur in zip(socs, socs[1:]):
+        cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
+
+    # Run SOCVals on the list of smoothed values and re-add it to each dictionary
+    for soc in socs:
+        soc['soc'] = SOC.SOCVal(choose_temp(soc['temp']), soc['volt_smooth'])
+
+    # Smooth SoCs by 95%
+    socs[0]['soc_smooth'] = socs[0]['soc']
+    for prev, cur in zip(socs, socs[1:]):
+        cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
+
+    return socs
+
+
+def getSOCEstimation(dbc, imei, s, e):
     interpolate_starts = dict()
     interpolate_ends = dict()
 
@@ -18,7 +47,6 @@ def getSOCEstimation(dbc, imei, sMonth, sDay, sYear):
         imei, s, e)
 
     Xs = []
-    Xdatetimes = []
     Xlabs = []
     Ys = []
 
@@ -38,7 +66,7 @@ def getSOCEstimation(dbc, imei, sMonth, sDay, sYear):
                 interpolate_starts[j] = min(interpolate_starts[j], count)
                 interpolate_ends[j] = max(interpolate_ends[j], count)
 
-        Xlabs.append(l[0].timestamp() * 1000)
+        Xlabs.append(l[0])
         Ys.append(float(l[1]))
         count += 1
 
@@ -96,15 +124,56 @@ def get_trips(dbc, imei, curDate, end):
     for record in dbc.SQLSelectGenerator(query):
         tripStartTimes.append(record[1])
         tripEndTimes.append(record[2])
-        if record[3] is not None and float(record[3]) != 0:
+        if record[3] is not None and float(record[3]) != 0:  # distance
             dists.append(float(record[3]))
         else:
             dists.append(0)
     return tripStartTimes, tripEndTimes, dists
 
 
-dbc = databaseConnector()
+connection = pymysql.connect(
+    host="tornado.cs.uwaterloo.ca",
+    port=3306,
+    user=os.environ['MYSQL_USER'],
+    passwd=os.environ['MYSQL_PASSWORD'],
+    db="webike"
+)
+cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-print(getSOCEstimation(dbc, 5233, 9, 15, 2016))
+imei = 5233
+start = datetime(year=2015, month=1, day=1)
+end = datetime(year=2016, month=9, day=30)
+# soc = getSOCEstimation2(cursor, imei, start, end)
+# pickle.dump(soc, open("soc.p", "wb"))
+# soc2 = getSOCEstimation(databaseConnector(), imei, start, end)
+# pickle.dump(soc2, open("soc2.p", "wb"))
 
-dbc.shutDown()
+soc = pickle.load(open("soc.p", "rb"))
+print('unpickled1')
+soc2 = pickle.load(open("soc2.p", "rb"))
+print('unpickled2')
+plt.plot(
+    list(map(lambda x: x['time'], soc)),
+    list(map(lambda x: x['soc'] * 100, soc)),
+    'b-'
+)
+plt.plot(
+    list(map(lambda x: x['time'], soc)),
+    list(map(lambda x: x['soc_smooth'] * 100, soc)),
+    'r-'
+)
+plt.plot(
+    list(map(lambda x: x[0], soc2['yAxis'])),
+    list(map(lambda x: x[1], soc2['yAxis'])),
+    'g-'
+)
+
+cursor.execute(
+    "SELECT  start_time, end_time FROM trip{} WHERE start_time >= '{}' AND end_time <= '{}' ORDER BY start_time"
+        .format(imei, start, end))
+trips = cursor.fetchall()
+for trip in trips:
+    plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
+plt.show()
+
+connection.close()
