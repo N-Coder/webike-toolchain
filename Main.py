@@ -6,6 +6,8 @@ from Constants import IMEIS
 
 __author__ = 'Niko Fink'
 
+IMEIS = ['5233']
+
 
 def preprocess_trips(cursor):
     print('Preprocessing JOIN information for new trips')
@@ -28,7 +30,7 @@ def preprocess_trips(cursor):
                 cursor.execute("SELECT Stamp FROM imei{} WHERE Stamp < '{}' ORDER BY Stamp DESC LIMIT 1"
                                .format(imei, trip['end_time']))
                 last_sample = cursor.fetchone()
-                cursor.execute("SELECT datetime AS diff "
+                cursor.execute("SELECT datetime, ABS(TIMESTAMPDIFF(SECOND, datetime, '{}')) AS diff "
                                "FROM webike_sfink.weather ORDER BY diff LIMIT 1"
                                .format(trip['start_time']))
                 weather_sample = cursor.fetchone()
@@ -70,8 +72,6 @@ def extract_hist(qcursor):
             "WHERE trip.imei = '{imei}'".format(imei=imei))
         trips = qcursor.fetchall()
         for trip in trips:
-            print('Processing trip {}#{}'.format(imei, trip['trip.trip']))
-
             hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
 
             if trip['trip.distance'] is not None:
@@ -126,11 +126,8 @@ if __name__ == "__main__":
     trip_hist_data = extract_hist(qcursor)
     plot_trips(trip_hist_data)
 
-    # average_weather = Weather.extract_hist(Weather.read_data_db(cursor))
-    # Weather.plot_weather(average_weather, fig_offset=figcnt, facecolor='green', alpha=0.5, normed=True,
-    #                      label_prefix='average-')
-    # figcnt = Weather.plot_weather(trip_weather, out_file='out/trips_per_weather_{}.png', fig_offset=figcnt,
-    #                               facecolor='blue',
-    #                               alpha=0.5, normed=True, label_prefix='trip-')
+    weather_hist_data = Weather.extract_hist(Weather.read_data_db(cursor))
+    Weather.plot_weather({'weather': weather_hist_data, 'trip': trip_hist_data['trip_weather']},
+                         out_file='out/trips_per_weather_{}.png')
 
     connection.close()

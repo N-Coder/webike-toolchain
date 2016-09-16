@@ -89,7 +89,7 @@ def write_data_csv(data):
     if not os.path.exists('out'):
         os.makedirs('out')
     with open('out/weather.csv', 'w', newline='') as f:
-        print('Writing data to {}'.format(f.name))
+        print('Writing w data to {}'.format(f.name))
         writer = csv.writer(f)
         writer.writerow(CSV_HEADER)
         for row in data:
@@ -184,7 +184,7 @@ def write_data_db(cursor, csv_data):
 
 
 def read_data_db(cursor):
-    print('Reading data from DB')
+    print('Reading weather data from DB')
 
     cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC")
     data = cursor.fetchall()
@@ -210,27 +210,46 @@ def append_hist(hist_data, key, val):
             hist_data[key].append(val)
 
 
-def plot_weather(hist_data, out_file=None, fig_offset=None, label_prefix="", **kwargs):
+def plot_weather(hist_datasets, out_file=None, fig_offset=None):
     print('Plotting weather graphs')
-    for key, value in hist_data.items():
+    # get all keys in all datasets
+    keys = {key for ds in hist_datasets.values() for key in ds.keys()}
+
+    for key in keys:
+        if key.endswith('_flag') or key == 'datetime' or key == 'quality':
+            continue
         if fig_offset is not None:
             plt.figure(fig_offset)
             fig_offset += 1
         else:
             plt.clf()
-        if 'label' not in kwargs:
-            kwargs['label'] = label_prefix + key
+
         if key == 'weather':
-            counter = Counter(value)
-            frequencies = counter.values()
-            names = counter.keys()
-            x_coordinates = np.arange(len(counter))
-            plt.bar(x_coordinates, frequencies, align='center', label=kwargs['label'])
-            plt.xticks(x_coordinates, names)
-        elif key.endswith('_flag') or key == 'datetime' or key == 'quality':
-            continue
+            counters = []
+            labels = set()
+            for name, ds in hist_datasets.items():
+                if key in ds:
+                    counter = Counter([w for v in ds[key] for w in v.split(",")])
+                    counter['NA'] = 0
+                    counters.append((name, counter))
+                    for label in counter.keys():
+                        labels.add(label)
+
+            x_coordinates = np.arange(len(labels))
+            plt.xticks(x_coordinates, labels)
+            for (name, counter) in counters:
+                integral = sum(counter.values())
+                freq = [counter[label] / integral * 100 for label in labels]
+                plt.bar(x_coordinates, freq, align='center', label=name + '-' + key, alpha=0.5)
         else:
-            plt.hist(value, bins=25, **kwargs)
+            value_lists = [(name, ds[key]) for name, ds in hist_datasets.items() if key in ds]
+            min_val = min([min(l, default=-sys.maxsize) for n, l in value_lists])
+            max_val = max([max(l, default=sys.maxsize) for n, l in value_lists])
+            bins = np.linspace(min_val, max_val, 25)
+
+            for name, vl in value_lists:
+                plt.hist(vl, bins=bins, label=name + ' - ' + key, alpha=0.5, normed=True)
+
         plt.title('Weather - ' + key)
         plt.legend()
         if out_file is not None:
@@ -250,6 +269,6 @@ if __name__ == "__main__":
 
     # db_data = read_data_db(cursor)
     hist_data = extract_hist(db_data)
-    plot_weather(hist_data, 'out/weather_{}.png')
+    plot_weather({'weather': hist_data}, 'out/weather_{}.png')
 
     connection.close()
