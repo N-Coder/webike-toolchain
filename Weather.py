@@ -24,9 +24,6 @@ SQL_MAPPING = {'Date/Time': 'datetime', 'Data Quality': 'quality', 'Temp (°C)':
                'Visibility Flag': 'visibility_flag', 'Stn Press (kPa)': 'stn_press', 'Stn Press Flag': 'stn_press_flag',
                'Hmdx': 'hmdx', 'Hmdx Flag': 'hmdx_flag', 'Wind Chill': 'wind_chill',
                'Wind Chill Flag': 'wind_chill_flag', 'Weather': 'weather'}
-SQL_COLUMNS = list(map(lambda x: SQL_MAPPING[x], filter(lambda x: x in SQL_MAPPING, CSV_HEADER)))
-SQL_INSERT = "REPLACE INTO webike_sfink.weather ({}) VALUES ({});" \
-    .format(", ".join(SQL_COLUMNS), ", ".join(["%s"] * len(SQL_COLUMNS)))
 
 
 def download_data():
@@ -102,12 +99,29 @@ def write_data_csv(data):
         print('{} lines written'.format(len(data)))
 
 
-def write_data_db(cursor, data):
+def __clean_csv_value(k_v):
+    k, v = k_v
+    if v == "‡":
+        return "P"
+    elif v == "":
+        return None
+    elif k == 'datetime':
+        return datetime.strptime(v, '%Y-%m-%d %H:%M')
+    else:
+        try:
+            try:
+                return int(v)
+            except ValueError:
+                return float(v)
+        except ValueError:
+            return v
+
+
+def write_data_db(cursor, csv_data):
     print('Writing data to DB')
 
     cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
     db_latest = cursor.fetchone()['datetime']
-
     cursor.execute("SELECT COUNT(*) AS count FROM webike_sfink.weather")
     db_count = cursor.fetchone()['count']
     print('DB already contains {} rows, with the latest being dated {}'
@@ -117,46 +131,55 @@ def write_data_db(cursor, data):
     skip_cnt = 0
     existing_cnt = 0
     try:
-        for row in data:
-            del row[1:5]  # delete redundant time information ('Year', 'Month', 'Day', 'Time')
-            if len(row) <= 1:  # skip entries which have no data
+        db_data = []
+
+        for row in csv_data:
+            # Transform csv-like ordered list to db-like named dict
+            row = zip(CSV_HEADER, row)
+            row = [(SQL_MAPPING[k_v[0]], k_v[1]) for k_v in row if (k_v[0] in SQL_MAPPING)]
+            row = [(k_v[0], __clean_csv_value(k_v)) for k_v in row]
+            row = dict(row)
+            # skip entries which have no data
+            if len(row) <= 1:
                 skip_cnt += 1
                 continue
-            assert len(row) == len(SQL_COLUMNS)
+            assert len(row) == len(SQL_MAPPING)
+            db_data.append(row)
 
-            if datetime.strptime(row[0], '%Y-%m-%d %H:%M') <= db_latest:
+            # skip entries which are probably already stored
+            if row['datetime'] <= db_latest:
                 existing_cnt += 1
                 continue
 
-            def clean(v):
-                if v == "‡":
-                    return "P"
-                elif v == "":
-                    return None
-                else:
-                    return v
-
-            row = list(map(clean, row))
+            # insert the entry
             try:
-                res = cursor.execute(SQL_INSERT, row)
+                sql = "REPLACE INTO webike_sfink.weather ({}) VALUES ({});" \
+                    .format(", ".join(row.keys()), ", ".join(["%s"] * len(row)))
+                res = cursor.execute(sql, list(row.values()))
+                if res == 1:
+                    insert_cnt += 1
+                else:
+                    raise AssertionError("Illegal result {} for row {}".format(res, row))
             except:
                 print("Exception for row {}".format(row))
                 raise
-            if res == 1:
-                insert_cnt += 1
-            else:
-                raise AssertionError("Illegal result {} for row {}".format(res, row))
+
             if (insert_cnt + skip_cnt) % 1000 == 0:
-                print('{} rows inserted, {} empty rows skipped, {} rows already existed'
+                print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
                       .format(insert_cnt, skip_cnt, existing_cnt))
 
         connection.commit()
         print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
               .format(insert_cnt, skip_cnt, existing_cnt))
+        print('{} of {} rows from csv parsed'
+              .format(insert_cnt + existing_cnt + skip_cnt, len(csv_data)))
         print('DB now contains {} + {} = {} of {} relevant rows'
-              .format(db_count, insert_cnt, db_count + insert_cnt, len(data) - skip_cnt))
-        assert insert_cnt + existing_cnt + skip_cnt == len(data)
-        assert db_count == existing_cnt
+              .format(db_count, insert_cnt, db_count + insert_cnt, len(db_data)))
+        assert insert_cnt + existing_cnt + skip_cnt == len(csv_data)
+        assert insert_cnt + existing_cnt == len(db_data)
+        assert existing_cnt == db_count
+
+        return db_data
     except:
         connection.rollback()
         raise
@@ -173,8 +196,8 @@ def read_data_db(cursor):
 
 def extract_hist(data):
     hist_data = {}
-    for col in SQL_COLUMNS:
-        hist_data[col] = []
+    for k, v in SQL_MAPPING.items():
+        hist_data[v] = []
     for row in data:
         for key, val in row.items():
             append_hist(hist_data, key, val)
@@ -189,25 +212,34 @@ def append_hist(hist_data, key, val):
             hist_data[key].append(val)
 
 
-def plot_weather(hist_data, filename):
-    print('Plotting graphs')
+def plot_weather(hist_data, out_file=None, fig_offset=None, label_prefix="", **kwargs):
+    print('Plotting weather graphs')
     for key, value in hist_data.items():
-        plt.clf()
+        if fig_offset is not None:
+            plt.figure(fig_offset)
+            fig_offset += 1
+        else:
+            plt.clf()
+        if 'label' not in kwargs:
+            kwargs['label'] = label_prefix + key
         if key == 'weather':
             counter = Counter(value)
             frequencies = counter.values()
             names = counter.keys()
             x_coordinates = np.arange(len(counter))
-            plt.bar(x_coordinates, frequencies, align='center')
+            plt.bar(x_coordinates, frequencies, align='center', label=kwargs['label'])
             plt.xticks(x_coordinates, names)
         elif key.endswith('_flag') or key == 'datetime' or key == 'quality':
             continue
         else:
-            plt.hist(value, bins=25)
+            plt.hist(value, bins=25, **kwargs)
         plt.title('Weather - ' + key)
-        plt.savefig(filename.format(key))
+        plt.legend()
+        if out_file is not None:
+            plt.savefig(out_file.format(key))
 
     print('Graphs finished')
+    return fig_offset
 
 
 if __name__ == "__main__":
@@ -224,8 +256,10 @@ if __name__ == "__main__":
     files = download_data()
     csv_data = parse_data(files)
     write_data_csv(csv_data)
-    write_data_db(cursor, csv_data)
+    db_data = write_data_db(cursor, csv_data)
 
-    db_data = read_data_db(cursor)
+    # db_data = read_data_db(cursor)
     hist_data = extract_hist(db_data)
     plot_weather(hist_data, 'out/weather_{}.png')
+
+    connection.close()

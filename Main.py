@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pymysql
 
 from Constants import IMEIS
-from Weather import append_hist, plot_weather, SQL_COLUMNS
+from Weather import append_hist, plot_weather, SQL_MAPPING, extract_hist, read_data_db
 
 __author__ = 'Niko Fink'
 
@@ -21,9 +21,9 @@ start_times = []
 distances = []
 initial_soc = []
 final_soc = []
-weather = {}
-for col in SQL_COLUMNS:
-    weather[col] = []
+trip_weather = {}
+for k, v in SQL_MAPPING.items():
+    trip_weather[v] = []
 
 for imei in IMEIS:
     print('Processing IMEI ' + imei)
@@ -33,6 +33,8 @@ for imei in IMEIS:
     for trip in trips:
         print('Processing Trip ' + imei + '#' + str(trip['id']))
 
+        # unfortunately, we can't use prepared statements as the table names change
+        # (table and column names have to be static in SQL)
         cursor.execute("SELECT * FROM imei{} WHERE Stamp > '{}' ORDER BY Stamp ASC LIMIT 1"
                        .format(imei, trip['start_time']))
         first_sample = cursor.fetchone()
@@ -52,10 +54,9 @@ for imei in IMEIS:
         if last_sample['ChargingCurr'] is not None:
             final_soc.append(float(last_sample['ChargingCurr']))  # TODO fix range
         for key, val in weather_sample.items():
-            append_hist(weather, key, val)
+            append_hist(trip_weather, key, val)
 
-connection.close()
-
+print('Plotting graphs')
 figcnt = 0
 plt.figure(figcnt)
 plt.hist(start_times, bins=24)
@@ -81,6 +82,10 @@ plt.ylabel('Number of Trips')
 plt.title('Number of Trips with certain Initial and Final State of Charge')
 plt.savefig('out/trips_per_soc.png')
 
-plot_weather(weather, 'out/trips_per_weather_{}.png')
+average_weather = extract_hist(read_data_db(cursor))
+plot_weather(average_weather, fig_offset=figcnt, facecolor='green', alpha=0.5, normed=True, label_prefix='average-')
+figcnt = plot_weather(trip_weather, out_file='out/trips_per_weather_{}.png', fig_offset=figcnt, facecolor='blue',
+                      alpha=0.5, normed=True, label_prefix='trip-')
 
 # plt.show()
+connection.close()
