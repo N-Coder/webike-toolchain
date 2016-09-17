@@ -1,11 +1,10 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
+import pymysql
 import scipy as sp
 from scipy.optimize import curve_fit
 
-# Adapted version of the state of charge estimation. The values are unchanged, but the algorithm was simplified.
-# Original Code: https://github.com/webike-dev/webike/blob/master/blizzard
-# Theory: http://www.tommyjcarpenter.com/papers/2015/tommy_j_carpenter_thesis_jan_2015.pdf#page=148
+from Constants import IMEIS
 
 d = {'-20': {}, '-10': {}, '23': {}, '0': {}, '45': {}}
 
@@ -154,7 +153,7 @@ threeLineP45, parm_cov = sp.optimize.curve_fit(
 
 
 # this is a modified version of Tommy's SOCVals, with all unnecessary code thrown out
-def getSOCVal(temp, volt):
+def get_SOC_val(temp, volt):
     if temp == -20 or temp == -10:
         if temp == -20:
             tl = linearN20
@@ -194,30 +193,56 @@ def choose_temp(t):
 
 
 # this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
-def getSOCEstimationTimeframe(cursor, imei, start, end):
-    # Select relevant data points
-    cursor.execute(
-        "SELECT Stamp AS time, BatteryVoltage AS volt, TempBattery AS temp FROM imei{} "
-        "WHERE Stamp >= '{}' AND Stamp <= '{}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0 "
-        "ORDER BY Stamp".format(imei, start, end))
-    socs = cursor.fetchall()
+def get_SOC_estimation(connection, imei, start, end):
+    print('Generating SoC estimation for {} from {} to {}'.format(imei, start, end))
 
-    # Smooth voltage by 95%
-    socs[0]['volt_smooth'] = socs[0]['volt']
-    for prev, cur in zip(socs, socs[1:]):
-        cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
+    try:
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        # Select relevant data points
+        count = cursor.execute(
+            "SELECT Stamp AS time, BatteryVoltage AS volt, TempBattery AS temp FROM imei{} "
+            "WHERE Stamp >= '{}' AND Stamp <= '{}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0 "
+            "ORDER BY Stamp".format(imei, start, end))
+        print('Got {} samples'.format(count))
+        if count < 1: return []
+        socs = cursor.fetchall()
 
-    # Run SOCVals on the list of smoothed values and re-add it to each dictionary
-    for soc in socs:
-        soc['soc'] = getSOCVal(choose_temp(soc['temp']), soc['volt_smooth'])
+        # Calculate first sample, all further samples will be smoothed
+        socs[0]['volt_smooth'] = socs[0]['volt']
+        socs[0]['temp_smooth'] = socs[0]['temp']
+        socs[0]['soc'] = get_SOC_val(choose_temp(socs[0]['temp_smooth']), socs[0]['volt_smooth'])
+        socs[0]['soc_smooth'] = socs[0]['soc']
 
-    # Smooth SoCs by 95%
-    socs[0]['soc_smooth'] = socs[0]['soc']
-    for prev, cur in zip(socs, socs[1:]):
-        cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
+        last_print = datetime.now()
+        for nr, (prev, cur) in enumerate(zip(socs, socs[1:])):
+            if (datetime.now() - last_print).total_seconds() > 5:
+                print("\t{:.0%} complete".format(nr / count))
+                last_print = datetime.now()
 
-    return socs
+            # Smooth voltage and temperature by 95%
+            cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
+            cur['temp_smooth'] = .95 * prev['temp_smooth'] + .05 * cur['temp']
+            # Run get_SOC_val on the smoothed values and re-add it to each dictionary
+            cur['soc'] = get_SOC_val(choose_temp(cur['temp_smooth']), cur['volt_smooth'])
+            # Smooth SoCs by 95%
+            cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
+
+            sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({}) ON DUPLICATE KEY UPDATE time=time" \
+                .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
+            cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
+
+        connection.commit()
+        return socs
+    except:
+        connection.rollback()
+        raise
 
 
-def getSOCEstimationSample(cursor, imei, timestamp):
-    return getSOCEstimationTimeframe(cursor, imei, timestamp - timedelta(minutes=2), timestamp)[-1]
+if __name__ == "__main__":
+    from DB import connection
+
+    for imei in IMEIS:
+        print('Processing IMEI ' + imei)
+        socs = get_SOC_estimation(connection, imei, datetime.min, datetime.now() + timedelta(days=1))
+
+    connection.close()
