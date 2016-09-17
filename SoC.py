@@ -203,9 +203,10 @@ def get_SOC_estimation(connection, imei, start, end):
             "SELECT Stamp AS time, BatteryVoltage AS volt, TempBattery AS temp FROM imei{} "
             "WHERE Stamp >= '{}' AND Stamp <= '{}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0 "
             "ORDER BY Stamp".format(imei, start, end))
-        print('Got {} samples'.format(count))
+        print('Got {:,} samples'.format(count))
         if count < 1: return []
         socs = cursor.fetchall()
+        inserted = 0
 
         # Calculate first sample, all further samples will be smoothed
         socs[0]['volt_smooth'] = socs[0]['volt']
@@ -216,7 +217,7 @@ def get_SOC_estimation(connection, imei, start, end):
         last_print = datetime.now()
         for nr, (prev, cur) in enumerate(zip(socs, socs[1:])):
             if (datetime.now() - last_print).total_seconds() > 5:
-                print("\t{:.0%} complete".format(nr / count))
+                print("\t{:,} of {:,} samples - {:.2%} complete".format(nr, count, nr / count))
                 last_print = datetime.now()
 
             # Smooth voltage and temperature by 95%
@@ -227,10 +228,13 @@ def get_SOC_estimation(connection, imei, start, end):
             # Smooth SoCs by 95%
             cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
 
+            cur['imei'] = imei
             sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({}) ON DUPLICATE KEY UPDATE time=time" \
                 .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
-            cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
+            res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
+            inserted += res
 
+        print("Inserted {:,} new samples".format(inserted))
         connection.commit()
         return socs
     except:
