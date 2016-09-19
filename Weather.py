@@ -37,10 +37,11 @@ def plot_weather(hist_datasets, out_file=None, fig_offset=None):
 
             x_coordinates = np.arange(len(labels))
             plt.xticks(x_coordinates, labels)
+            prop_iter = iter(plt.rcParams['axes.prop_cycle'])
             for (name, counter) in counters:
                 integral = sum(counter.values())
                 freq = [counter[label] / integral * 100 for label in labels]
-                plt.bar(x_coordinates, freq, align='center', label=name + '-' + key, alpha=0.5)
+                plt.bar(x_coordinates, freq, label=name + '-' + key, alpha=0.5, facecolor=next(prop_iter)['color'])
         else:
             value_lists = [(name, ds[key]) for name, ds in hist_datasets.items() if key in ds]
             min_val = min([min(l, default=-sys.maxsize) for n, l in value_lists])
