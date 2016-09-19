@@ -1,3 +1,5 @@
+import logging
+
 import DB
 import SoC
 import Trips
@@ -6,6 +8,7 @@ import WeatherWU
 
 __author__ = "Niko Fink"
 assert __name__ == "__main__"
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
 
 with DB.connect() as connection:
     SoC.preprocess_estimates(connection)
