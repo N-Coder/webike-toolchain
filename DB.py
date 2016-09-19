@@ -1,6 +1,10 @@
+import os
 import sys
 import time
+import warnings
+from contextlib import contextmanager
 
+import pymysql
 from pymysql.cursors import Cursor, DictCursorMixin
 
 
@@ -44,3 +48,22 @@ class QualifiedDictCursor(QualifiedDictCursorMixin, StopwatchCursorMixin, Cursor
 
 class DictCursor(DictCursorMixin, StopwatchCursorMixin, Cursor):
     """A cursor which returns results as a dictionary"""
+
+
+@contextmanager
+def connect():
+    warnings.filterwarnings('error', category=pymysql.Warning)
+    connection = pymysql.connect(
+        host="localhost",
+        port=3306,
+        user=os.environ['MYSQL_USER'],
+        passwd=os.environ['MYSQL_PASSWORD'],
+        db="webike"
+    )
+    try:
+        yield connection
+    except:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
