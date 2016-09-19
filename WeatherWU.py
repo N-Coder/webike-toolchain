@@ -3,7 +3,6 @@ import os
 import shutil
 from datetime import datetime, timedelta, timezone, time
 from sys import stderr
-from textwrap import indent
 
 import requests
 
@@ -48,8 +47,7 @@ def select_missing_dates(connection):
             GROUP BY selected_date
             HAVING count < 24 OR min > ADDTIME(selected_date, '00:00:00') OR max < ADDTIME(selected_date, '23:00:00')""")
         dates = cursor.fetchall()
-        print('{} dates having too few data:'.format(len(dates)))
-        print(indent("\n".join(dates), "\t"))
+        print('{} dates having too few data'.format(len(dates)))
         return dates
 
 
