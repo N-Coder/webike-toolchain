@@ -1,4 +1,5 @@
 import copy
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -7,25 +8,27 @@ import WeatherGC
 import WeatherWU
 from Constants import IMEIS
 from DB import DictCursor, QualifiedDictCursor
+from Logging import BraceMessage as __
+
+__author__ = "Niko Fink"
+logger = logging.getLogger(__name__)
 
 HIST_DATA = {'start_times': [], 'distances': [], 'initial_soc': [], 'final_soc': [],
              'trip_weather': copy.deepcopy(WeatherGC.HIST_DATA), 'trip_metar': copy.deepcopy(WeatherWU.HIST_DATA)}
 
-__author__ = 'Niko Fink'
-
 
 def preprocess_trips(connection):
-    print('Preprocessing JOIN information for new trips')
+    logger.info("Preprocessing JOIN information for new trips")
     with connection.cursor(DictCursor) as cursor:
         for imei in IMEIS:
             cursor.execute("SELECT trip{imei}.* FROM trip{imei} LEFT JOIN webike_sfink.trips ON "
                            "trip{imei}.id = trips.trip AND trips.imei='{imei}' WHERE trips.trip IS NULL;"
                            .format(imei=imei))
             unprocessed_trips = cursor.fetchall()
-            print('Processing {} new entries for IMEI {}'.format(len(unprocessed_trips), imei))
+            logger.info(__("Processing {} new entries for IMEI {}", len(unprocessed_trips), imei))
             for nr, trip in enumerate(unprocessed_trips):
-                print('{} of {}: processing new trip {}#{}'
-                      .format(nr + 1, len(unprocessed_trips), imei, trip['id']))
+                logger.info(__("{} of {}: processing new trip {}#{}",
+                               nr + 1, len(unprocessed_trips), imei, trip['id']))
 
                 # unfortunately, we can't use prepared statements as the table names change
                 # (table and column names have to be static in SQL)
@@ -56,15 +59,13 @@ def preprocess_trips(connection):
 
 
 def extract_hist(connection):
-    print('Generating histogram data')
+    logger.info("Generating histogram data")
 
     with connection.cursor(QualifiedDictCursor) as qcursor:
         hist_data = copy.deepcopy(HIST_DATA)
-        for k, v in WeatherGC.SQL_MAPPING.items():
-            hist_data['trip_weather'][v] = []
 
         for imei in IMEIS:
-            print('Processing IMEI ' + imei)
+            logger.info(__("Processing IMEI {}", imei))
 
             qcursor.execute(
                 "SELECT * "
@@ -102,20 +103,20 @@ def extract_hist(connection):
 
 
 def plot_trips(hist_data):
-    print('Plotting trip graphs')
+    logger.info("Plotting trip graphs")
     plt.clf()
     plt.hist(hist_data['start_times'], bins=24)
-    plt.xlabel('Time of Day')
-    plt.ylabel('Number of Trips')
-    plt.title('Number of Trips per Hour of Day')
-    plt.savefig('out/trips_per_hour.png')
+    plt.xlabel("Time of Day")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Hour of Day")
+    plt.savefig("out/trips_per_hour.png")
 
     plt.clf()
     plt.hist(hist_data['distances'], bins=25)
-    plt.xlabel('Distance')
-    plt.ylabel('Number of Trips')
-    plt.title('Number of Trips per Distance')
-    plt.savefig('out/trips_per_distance.png')
+    plt.xlabel("Distance")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Distance")
+    plt.savefig("out/trips_per_distance.png")
 
     plt.clf()
     bins = np.linspace(
@@ -124,11 +125,11 @@ def plot_trips(hist_data):
     hist_initial = plt.hist(hist_data['initial_soc'], bins=bins, label='initial')
     hist_final = plt.hist(hist_data['final_soc'], bins=bins, label='final')
     order_hists([hist_initial, hist_final])
-    plt.xlabel('SoC')
-    plt.ylabel('Number of Trips')
-    plt.title('Number of Trips with certain Initial and Final State of Charge')
+    plt.xlabel("SoC")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips with certain Initial and Final State of Charge")
     plt.legend(loc='upper left')
-    plt.savefig('out/trips_per_soc.png')
+    plt.savefig("out/trips_per_soc.png")
 
 
 def order_hists(hists):

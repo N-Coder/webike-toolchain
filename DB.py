@@ -1,11 +1,16 @@
+import logging
 import os
-import sys
 import time
 import warnings
 from contextlib import contextmanager
 
 import pymysql
 from pymysql.cursors import Cursor, DictCursorMixin
+
+from Logging import BraceMessage as __
+
+__author__ = "Niko Fink"
+logger = logging.getLogger(__name__)
 
 
 class QualifiedDictCursorMixin(object):
@@ -36,11 +41,11 @@ class StopwatchCursorMixin(object):
             res = super(StopwatchCursorMixin, self)._query(q)
             dur = time.perf_counter() - start
             if dur > 2:
-                print("Took {:.2f}s for executing query affecting {} rows"
-                      .format(dur, res))
+                logger.debug(__("Took {:.2f}s for executing query affecting {} rows",
+                                dur, res))
             return res
         except:
-            print("Query failed after {:.2f}s:\n{}".format(time.perf_counter() - start, q), file=sys.stderr)
+            logger.error(__("Query failed after {:.2f}s:\n{}", time.perf_counter() - start, q))
             raise
 
 
@@ -70,5 +75,5 @@ def connect():
         raise
     finally:
         dur = time.perf_counter() - start
-        print("DB connection open for {:.2f}s".format(dur))
+        logger.debug(__("DB connection open for {:.2f}s", dur))
         connection.close()

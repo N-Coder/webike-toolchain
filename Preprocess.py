@@ -4,7 +4,7 @@ import Trips
 import WeatherGC
 import WeatherWU
 
-__author__ = 'Niko Fink'
+__author__ = "Niko Fink"
 assert __name__ == "__main__"
 
 with DB.connect() as connection:

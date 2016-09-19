@@ -4,7 +4,7 @@ import Weather
 import WeatherGC
 import WeatherWU
 
-__author__ = 'Niko Fink'
+__author__ = "Niko Fink"
 assert __name__ == "__main__"
 
 with DB.connect() as connection:
@@ -18,7 +18,7 @@ with DB.connect() as connection:
             'weather': gc_hist_data,
             'trip': trip_hist_data['trip_weather']
         },
-        out_file='out/trips_per_weathergc_{}.png'
+        out_file="out/trips_per_weathergc_{}.png"
     )
 
     wu_db_data = WeatherWU.read_data_db(connection)
@@ -28,5 +28,5 @@ with DB.connect() as connection:
             'weather': wu_hist_data,
             'trip': trip_hist_data['trip_metar']
         },
-        out_file='out/trips_per_wunderg_{}.png'
+        out_file="out/trips_per_wunderg_{}.png"
     )

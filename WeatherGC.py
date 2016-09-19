@@ -1,7 +1,7 @@
 import copy
 import csv
+import logging
 import os
-import sys
 from datetime import datetime
 from decimal import Decimal
 
@@ -9,6 +9,10 @@ import wget
 from dateutil.relativedelta import relativedelta
 
 from DB import DictCursor
+from Logging import BraceMessage as __
+
+__author__ = "Niko Fink"
+logger = logging.getLogger(__name__)
 
 CSV_HEADER = ['Date/Time', 'Year', 'Month', 'Day', 'Time', 'Data Quality', 'Temp (°C)', 'Temp Flag',
               'Dew Point Temp (°C)', 'Dew Point Temp Flag', 'Rel Hum (%)', 'Rel Hum Flag',
@@ -22,19 +26,19 @@ SQL_MAPPING = {'Date/Time': 'datetime', 'Data Quality': 'quality', 'Temp (°C)':
                'Visibility Flag': 'visibility_flag', 'Stn Press (kPa)': 'stn_press', 'Stn Press Flag': 'stn_press_flag',
                'Hmdx': 'hmdx', 'Hmdx Flag': 'hmdx_flag', 'Wind Chill': 'wind_chill',
                'Wind Chill Flag': 'wind_chill_flag', 'Weather': 'weather'}
-DOWNLOAD_DIR = 'tmp/weather.gc.ca/'
+DOWNLOAD_DIR = "tmp/weather.gc.ca/"
 HIST_DATA = dict([(v, []) for k, v in SQL_MAPPING.items()])
 
 
 def download_data():
     files = []
-    print('Downloading weather.gc.ca data using cache directory ' + DOWNLOAD_DIR)
+    logger.info(__("Downloading weather.gc.ca data using cache directory {}", DOWNLOAD_DIR))
     if not os.path.exists(DOWNLOAD_DIR):
-        print('Created cache directory')
+        logger.info("Created cache directory")
         os.makedirs(DOWNLOAD_DIR)
     for year in range(2014, datetime.now().year + 1):
         for month in range(1, 12 + 1):
-            file = '{}{}-{}.csv'.format(DOWNLOAD_DIR, year, month)
+            file = "{}{}-{}.csv".format(DOWNLOAD_DIR, year, month)
             end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=+1)
 
             if datetime(year=year, month=month, day=1) > datetime.now():  # don't download future months
@@ -44,20 +48,20 @@ def download_data():
             if os.path.exists(file):
                 mtime = datetime.fromtimestamp(os.path.getmtime(file))
                 if mtime > end_of_month:
-                    print('Using cached version of {} last modified on {}'
-                          .format(file, mtime))
+                    logger.debug(__("Using cached version of {} last modified on {}",
+                                    file, mtime))
                     continue
                 else:
-                    print('Removing outdated version of ' + file)
+                    logger.info(__("Removing outdated version of {}", file))
                     os.remove(file)
 
-            print('Downloading ' + file)
+            logger.info(__("Downloading {}", file))
             wget.download(
                 "http://climate.weather.gc.ca/climate_data/bulk_data_e.html?"
                 "format=csv&stationID=48569&Year={year}&Month={month}&Day=1&timeframe=1&submit= Download+Data"
                     .format(year=year, month=month),
                 out=file, bar=None)
-    print('Download complete, got {} files'.format(len(files)))
+    logger.info(__("Download complete, got {} files", len(files)))
     return files
 
 
@@ -65,7 +69,7 @@ def parse_data(files):
     data = []
     latest = datetime.min
     for file in files:
-        print('Parsing ' + file)
+        logger.debug(__("Parsing {}", file))
 
         with open(file, newline='', encoding='cp1250') as f:
             reader = csv.reader(f)
@@ -78,22 +82,22 @@ def parse_data(files):
                     if row == CSV_HEADER:
                         skip = False
                 if skip:
-                    sys.exit('Invalid csv file {} missing header'.format(file))
+                    raise ValueError("Invalid csv file {} missing header".format(file))
             except csv.Error as e:
-                sys.exit('Invalid csv file {}, line {}: {}'.format(file, reader.line_num, e))
-    print('{} entries parsed, latest one from {}'.format(len(data), latest))
+                raise ValueError("Invalid csv file {}, line {}".format(file, reader.line_num)) from e
+    logger.info(__("{} entries parsed, latest one from {}", len(data), latest))
     data.sort(key=lambda row: row[0])
     return data
 
 
 def write_data_csv(data):
-    with open(DOWNLOAD_DIR + 'weather.csv', 'w', newline='') as f:
-        print('Writing w data to {}'.format(f.name))
+    with open(DOWNLOAD_DIR + "weather.csv", 'w', newline='') as f:
+        logger.info(__("Writing w data to {}", f.name))
         writer = csv.writer(f)
         writer.writerow(CSV_HEADER)
         for row in data:
             writer.writerow(row)
-        print('{} lines written'.format(len(data)))
+        logger.info(__("{} lines written", len(data)))
 
 
 def __clean_csv_value(k_v):
@@ -115,15 +119,15 @@ def __clean_csv_value(k_v):
 
 
 def write_data_db(connection, csv_data):
-    print('Writing data to DB')
+    logger.info("Writing data to DB")
 
     with connection.cursor(DictCursor) as cursor:
         cursor.execute("SELECT datetime FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
         db_latest = cursor.fetchone()['datetime']
         cursor.execute("SELECT COUNT(*) AS count FROM webike_sfink.weather")
         db_count = cursor.fetchone()['count']
-        print('DB already contains {} rows, with the latest being dated {}'
-              .format(db_count, db_latest))
+        logger.info(__("DB already contains {} rows, with the latest being dated {}",
+                       db_count, db_latest))
 
         insert_cnt = 0
         skip_cnt = 0
@@ -160,19 +164,19 @@ def write_data_db(connection, csv_data):
                 else:
                     raise AssertionError("Illegal result {} for row {}".format(res, row))
             except:
-                print("Exception for row {}".format(row))
+                logger.info(__("Exception for row {}", row))
                 raise
 
             if (insert_cnt + skip_cnt) % 1000 == 0:
-                print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
-                      .format(insert_cnt, skip_cnt, existing_cnt))
+                logger.info(__("{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped",
+                               insert_cnt, skip_cnt, existing_cnt))
 
-        print('{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped'
-              .format(insert_cnt, skip_cnt, existing_cnt))
-        print('{} of {} rows from csv parsed'
-              .format(insert_cnt + existing_cnt + skip_cnt, len(csv_data)))
-        print('DB now contains {} + {} = {} of {} relevant rows'
-              .format(db_count, insert_cnt, db_count + insert_cnt, len(db_data)))
+        logger.info(__("{} rows inserted, {} empty rows skipped, {} rows older than latest change skipped",
+                       insert_cnt, skip_cnt, existing_cnt))
+        logger.info(__("{} of {} rows from csv parsed",
+                       insert_cnt + existing_cnt + skip_cnt, len(csv_data)))
+        logger.info(__("DB now contains {} + {} = {} of {} relevant rows",
+                       db_count, insert_cnt, db_count + insert_cnt, len(db_data)))
         assert insert_cnt + existing_cnt + skip_cnt == len(csv_data)
         assert insert_cnt + existing_cnt == len(db_data)
         assert existing_cnt == db_count
@@ -181,12 +185,12 @@ def write_data_db(connection, csv_data):
 
 
 def read_data_db(connection):
-    print('Reading weather.gc data from DB')
+    logger.info("Reading weather.gc data from DB")
 
     with connection.cursor(DictCursor) as cursor:
         cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC")
         data = cursor.fetchall()
-        print('{} rows read from DB'.format(len(data)))
+        logger.info(__("{} rows read from DB", len(data)))
         return data
 
 

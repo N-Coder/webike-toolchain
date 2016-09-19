@@ -1,41 +1,44 @@
 import copy
 import csv
+import logging
 import os
 import shutil
 from datetime import datetime, timedelta, timezone, time
-from sys import stderr
 
 import requests
 from metar import Metar
 
 from DB import DictCursor
+from Logging import BraceMessage as __
+
+__author__ = "Niko Fink"
+logger = logging.getLogger(__name__)
 
 HIST_DATA = {'temp': [], 'dewpt': [], 'wind_speed': [], 'vis': [], 'press': [], 'weather_desc': [], 'weather_prec': [],
              'weather_obsc': [], 'weather_othr': []}
 
-DOWNLOAD_DIR = 'tmp/wunderground/'
+DOWNLOAD_DIR = "tmp/wunderground/"
 URL = "https://www.wunderground.com/history/airport/CYKF/{year}/{month}/{day}/DailyHistory.html?format=1"
 
 
 def insert_navlost(connection):
-    print('Loading navlost data')
+    logger.info("Loading navlost data")
     with connection.cursor(DictCursor) as cursor:
-        with open('tmp/f0b74520-f7df-45e4-a596-f4392296296a.csv', 'rt') as f:
+        with open("tmp/f0b74520-f7df-45e4-a596-f4392296296a.csv", 'rt') as f:
             reader = csv.reader(f, delimiter='\t')
             count = 0
             for row in reader:
                 stamp = datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
-                print('Inserting {}: {}'.format(stamp, row[3]))
                 count += cursor.execute(
                     "REPLACE INTO webike_sfink.weather_metar (stamp, metar, source) VALUES (%s, %s, 'navlost')",
-                    [stamp, 'METAR ' + row[3]])
+                    [stamp, "METAR " + row[3]])
                 if count % 1000 == 0:
-                    print('\t{} rows inserted'.format(count))
-            print('{} rows inserted'.format(count))
+                    logger.info(__("{} rows inserted", count))
+            logger.info(__("{} rows inserted", count))
 
 
 def select_missing_dates(connection):
-    print('Selecting dates with missing data (this could take a few secs)...')
+    logger.info("Selecting dates with missing data (this could take a few secs)...")
     with connection.cursor(DictCursor) as cursor:
         cursor.execute("""SELECT
               selected_date,
@@ -52,14 +55,14 @@ def select_missing_dates(connection):
             GROUP BY selected_date
             HAVING count < 24 OR min > ADDTIME(selected_date, '00:00:00') OR max < ADDTIME(selected_date, '23:00:00')""")
         dates = cursor.fetchall()
-        print('{} dates having too few data'.format(len(dates)))
+        logger.info(__("{} dates having too few data", len(dates)))
         return dates
 
 
 def download_wunderg(connection, dates):
-    print('Downloading weather underground data using cache directory ' + DOWNLOAD_DIR)
+    logger.info(__("Downloading weather underground data using cache directory {}", DOWNLOAD_DIR))
     if not os.path.exists(DOWNLOAD_DIR):
-        print('Created cache directory')
+        logger.info("Created cache directory")
         os.makedirs(DOWNLOAD_DIR)
 
     with connection.cursor(DictCursor) as cursor:
@@ -70,16 +73,16 @@ def download_wunderg(connection, dates):
 
 
 def __download_wunderg_metar(cursor, date):
-    print("Downloading METAR data for {}".format(date))
+    logger.info(__("Downloading METAR data for {}", date))
     file = "{}{year}-{month}-{day}.csv".format(DOWNLOAD_DIR, year=date.year, month=date.month, day=date.day)
 
     if os.path.exists(file):
         mtime = datetime.fromtimestamp(os.path.getmtime(file))
         if mtime < (datetime.fromordinal(date.toordinal()) + timedelta(days=2)):
-            print('\tRemoving outdated version of ' + file)
+            logger.info(__("Removing outdated version of {}", file))
             os.remove(file)
         else:
-            print('\tFile already exists, no new data available')
+            logger.info("File already exists, no new data available")
             return
     if not os.path.exists(file):
         res = requests.get(URL.format(year=date.year, month=date.month, day=date.day), stream=True,
@@ -92,7 +95,7 @@ def __download_wunderg_metar(cursor, date):
     with open(file, 'rt') as f:
         text = f.read()
         if "No daily or hourly history data available" in text:
-            print("\tNo daily or hourly history data available from {}".format(file), file=stderr)
+            logger.warn(__("No daily or hourly history data available from {}", file))
             return
         text = text.strip().replace("<br />", "").splitlines()
         reader = csv.DictReader(text, )
@@ -104,16 +107,16 @@ def __download_wunderg_metar(cursor, date):
                 count += cursor.execute(
                     "REPLACE INTO webike_sfink.weather_metar (stamp, metar, source) VALUES (%s, %s, 'wunderg')",
                     [time, metar])
-        print('\t{} rows inserted'.format(count))
+        logger.info(__("{} rows inserted", count))
 
 
 def read_data_db(connection):
-    print('Reading weather underground data from DB')
+    logger.info("Reading weather underground data from DB")
 
     with connection.cursor(DictCursor) as cursor:
         cursor.execute("SELECT * FROM webike_sfink.weather_metar ORDER BY stamp DESC")
         data = cursor.fetchall()
-        print('{} rows read from DB'.format(len(data)))
+        logger.info(__("{} rows read from DB", len(data)))
         return data
 
 
@@ -148,8 +151,6 @@ def append_hist(hist_data, metar):
         hist_data['weather_obsc'].append("")
         hist_data['weather_othr'].append("")
     else:
-        if len(metar.weather) > 1:
-            print("multiple weather states: " + metar.present_weather())
         for weather in metar.weather:
             (inten, desc, prec, obsc, othr) = weather
             hist_data['weather_desc'].append(desc)

@@ -1,12 +1,16 @@
+import logging
 import sys
 from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+__author__ = "Niko Fink"
+logger = logging.getLogger(__name__)
+
 
 def plot_weather(hist_datasets, out_file=None, fig_offset=None):
-    print('Plotting weather graphs')
+    logger.info("Plotting weather graphs")
     # get all keys in all datasets
     keys = {key for ds in hist_datasets.values() for key in ds.keys()}
 
@@ -44,12 +48,12 @@ def plot_weather(hist_datasets, out_file=None, fig_offset=None):
             bins = np.linspace(min_val, max_val, 25)
 
             for name, vl in value_lists:
-                plt.hist(vl, bins=bins, label=name + ' - ' + key, alpha=0.5, normed=True)
+                plt.hist(vl, bins=bins, label=name + " - " + key, alpha=0.5, normed=True)
 
-        plt.title('Weather - ' + key)
+        plt.title("Weather - " + key)
         plt.legend()
         if out_file is not None:
             plt.savefig(out_file.format(key))
 
-    print('Graphs finished')
+    logger.info("Graphs finished")
     return fig_offset
