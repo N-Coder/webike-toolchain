@@ -34,8 +34,10 @@ class StopwatchCursorMixin(object):
         start = time.perf_counter()
         try:
             res = super(StopwatchCursorMixin, self)._query(q)
-            print("Took {:.2f}s for executing query affecting {} rows"
-                  .format(time.perf_counter() - start, res))
+            dur = time.perf_counter() - start
+            if dur > 2:
+                print("Took {:.2f}s for executing query affecting {} rows"
+                      .format(dur, res))
             return res
         except:
             print("Query failed after {:.2f}s:\n{}".format(time.perf_counter() - start, q), file=sys.stderr)
@@ -54,16 +56,19 @@ class DictCursor(DictCursorMixin, StopwatchCursorMixin, Cursor):
 def connect():
     warnings.filterwarnings('error', category=pymysql.Warning)
     connection = pymysql.connect(
-        host="localhost",
+        host="tornado.cs.uwaterloo.ca",
         port=3306,
         user=os.environ['MYSQL_USER'],
         passwd=os.environ['MYSQL_PASSWORD'],
         db="webike"
     )
+    start = time.perf_counter()
     try:
         yield connection
     except:
         connection.rollback()
         raise
     finally:
+        dur = time.perf_counter() - start
+        print("DB connection open for {:.2f}s".format(dur))
         connection.close()
