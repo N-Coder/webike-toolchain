@@ -1,12 +1,10 @@
+import copy
 import csv
 import os
 import sys
-from collections import Counter
 from datetime import datetime
 from decimal import Decimal
 
-import matplotlib.pyplot as plt
-import numpy as np
 import wget
 from dateutil.relativedelta import relativedelta
 
@@ -24,18 +22,19 @@ SQL_MAPPING = {'Date/Time': 'datetime', 'Data Quality': 'quality', 'Temp (°C)':
                'Visibility Flag': 'visibility_flag', 'Stn Press (kPa)': 'stn_press', 'Stn Press Flag': 'stn_press_flag',
                'Hmdx': 'hmdx', 'Hmdx Flag': 'hmdx_flag', 'Wind Chill': 'wind_chill',
                'Wind Chill Flag': 'wind_chill_flag', 'Weather': 'weather'}
+DOWNLOAD_DIR = 'tmp/weather.gc.ca/'
+HIST_DATA = dict([(v, []) for k, v in SQL_MAPPING.items()])
 
 
 def download_data():
-    download_dir = 'tmp/weather.gc.ca/'
     files = []
-    print('Downloading weather.gc.ca data using cache directory ' + download_dir)
-    if not os.path.exists(download_dir):
+    print('Downloading weather.gc.ca data using cache directory ' + DOWNLOAD_DIR)
+    if not os.path.exists(DOWNLOAD_DIR):
         print('Created cache directory')
-        os.makedirs(download_dir)
+        os.makedirs(DOWNLOAD_DIR)
     for year in range(2014, datetime.now().year + 1):
         for month in range(1, 12 + 1):
-            file = '{}{}-{}.csv'.format(download_dir, year, month)
+            file = '{}{}-{}.csv'.format(DOWNLOAD_DIR, year, month)
             end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=+1)
 
             if datetime(year=year, month=month, day=1) > datetime.now():  # don't download future months
@@ -88,9 +87,7 @@ def parse_data(files):
 
 
 def write_data_csv(data):
-    if not os.path.exists('out'):
-        os.makedirs('out')
-    with open('out/weather.csv', 'w', newline='') as f:
+    with open(DOWNLOAD_DIR + 'weather.csv', 'w', newline='') as f:
         print('Writing w data to {}'.format(f.name))
         writer = csv.writer(f)
         writer.writerow(CSV_HEADER)
@@ -184,7 +181,7 @@ def write_data_db(connection, csv_data):
 
 
 def read_data_db(connection):
-    print('Reading weather data from DB')
+    print('Reading weather.gc data from DB')
 
     with connection.cursor(DictCursor) as cursor:
         cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC")
@@ -194,7 +191,7 @@ def read_data_db(connection):
 
 
 def extract_hist(data):
-    hist_data = {}
+    hist_data = copy.deepcopy(HIST_DATA)
     for k, v in SQL_MAPPING.items():
         hist_data[v] = []
     for row in data:
@@ -209,52 +206,3 @@ def append_hist(hist_data, key, val):
             hist_data[key].append(float(val))
         else:
             hist_data[key].append(val)
-
-
-def plot_weather(hist_datasets, out_file=None, fig_offset=None):
-    print('Plotting weather graphs')
-    # get all keys in all datasets
-    keys = {key for ds in hist_datasets.values() for key in ds.keys()}
-
-    for key in keys:
-        if key.endswith('_flag') or key == 'datetime' or key == 'quality':
-            continue
-        if fig_offset is not None:
-            plt.figure(fig_offset)
-            fig_offset += 1
-        else:
-            plt.clf()
-
-        if key == 'weather':
-            counters = []
-            labels = set()
-            for name, ds in hist_datasets.items():
-                if key in ds:
-                    counter = Counter([w for v in ds[key] for w in v.split(",")])
-                    counter['NA'] = 0
-                    counters.append((name, counter))
-                    for label in counter.keys():
-                        labels.add(label)
-
-            x_coordinates = np.arange(len(labels))
-            plt.xticks(x_coordinates, labels)
-            for (name, counter) in counters:
-                integral = sum(counter.values())
-                freq = [counter[label] / integral * 100 for label in labels]
-                plt.bar(x_coordinates, freq, align='center', label=name + '-' + key, alpha=0.5)
-        else:
-            value_lists = [(name, ds[key]) for name, ds in hist_datasets.items() if key in ds]
-            min_val = min([min(l, default=-sys.maxsize) for n, l in value_lists])
-            max_val = max([max(l, default=sys.maxsize) for n, l in value_lists])
-            bins = np.linspace(min_val, max_val, 25)
-
-            for name, vl in value_lists:
-                plt.hist(vl, bins=bins, label=name + ' - ' + key, alpha=0.5, normed=True)
-
-        plt.title('Weather - ' + key)
-        plt.legend()
-        if out_file is not None:
-            plt.savefig(out_file.format(key))
-
-    print('Graphs finished')
-    return fig_offset
