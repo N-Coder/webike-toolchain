@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import wget
 from dateutil.relativedelta import relativedelta
+from pymysql.cursors import DictCursor
 
 CSV_HEADER = ['Date/Time', 'Year', 'Month', 'Day', 'Time', 'Data Quality', 'Temp (°C)', 'Temp Flag',
               'Dew Point Temp (°C)', 'Dew Point Temp Flag', 'Rel Hum (%)', 'Rel Hum Flag',
@@ -115,20 +116,20 @@ def __clean_csv_value(k_v):
             return v
 
 
-def write_data_db(cursor, csv_data):
+def write_data_db(connection, csv_data):
     print('Writing data to DB')
 
-    cursor.execute("SELECT datetime FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
-    db_latest = cursor.fetchone()['datetime']
-    cursor.execute("SELECT COUNT(*) AS count FROM webike_sfink.weather")
-    db_count = cursor.fetchone()['count']
-    print('DB already contains {} rows, with the latest being dated {}'
-          .format(db_count, db_latest))
+    with connection.cursor(DictCursor) as cursor:
+        cursor.execute("SELECT datetime FROM webike_sfink.weather ORDER BY datetime DESC LIMIT 1")
+        db_latest = cursor.fetchone()['datetime']
+        cursor.execute("SELECT COUNT(*) AS count FROM webike_sfink.weather")
+        db_count = cursor.fetchone()['count']
+        print('DB already contains {} rows, with the latest being dated {}'
+              .format(db_count, db_latest))
 
-    insert_cnt = 0
-    skip_cnt = 0
-    existing_cnt = 0
-    try:
+        insert_cnt = 0
+        skip_cnt = 0
+        existing_cnt = 0
         db_data = []
 
         for row in csv_data:
@@ -156,6 +157,8 @@ def write_data_db(cursor, csv_data):
                 res = cursor.execute(sql, list(row.values()))
                 if res == 1:
                     insert_cnt += 1
+                elif res == 2:
+                    existing_cnt += 1
                 else:
                     raise AssertionError("Illegal result {} for row {}".format(res, row))
             except:
@@ -176,20 +179,17 @@ def write_data_db(cursor, csv_data):
         assert insert_cnt + existing_cnt == len(db_data)
         assert existing_cnt == db_count
 
-        connection.commit()
         return db_data
-    except:
-        connection.rollback()
-        raise
 
 
-def read_data_db(cursor):
+def read_data_db(connection):
     print('Reading weather data from DB')
 
-    cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC")
-    data = cursor.fetchall()
-    print('{} rows read from DB'.format(len(data)))
-    return data
+    with connection.cursor(DictCursor) as cursor:
+        cursor.execute("SELECT * FROM webike_sfink.weather ORDER BY datetime DESC")
+        data = cursor.fetchall()
+        print('{} rows read from DB'.format(len(data)))
+        return data
 
 
 def extract_hist(data):
@@ -257,18 +257,3 @@ def plot_weather(hist_datasets, out_file=None, fig_offset=None):
 
     print('Graphs finished')
     return fig_offset
-
-
-if __name__ == "__main__":
-    from DB import cursor, connection
-
-    files = download_data()
-    csv_data = parse_data(files)
-    write_data_csv(csv_data)
-    db_data = write_data_db(cursor, csv_data)
-
-    # db_data = read_data_db(cursor)
-    hist_data = extract_hist(db_data)
-    plot_weather({'weather': hist_data}, 'out/weather_{}.png')
-
-    connection.close()

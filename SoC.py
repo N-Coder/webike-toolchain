@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
-import pymysql
 import scipy as sp
+from pymysql.cursors import DictCursor
 from scipy.optimize import curve_fit
 
 from Constants import IMEIS
@@ -153,7 +153,7 @@ threeLineP45, parm_cov = sp.optimize.curve_fit(
 
 
 # this is a modified version of Tommy's SOCVals, with all unnecessary code thrown out
-def get_SOC_val(temp, volt):
+def calc_soc(temp, volt):
     if temp == -20 or temp == -10:
         if temp == -20:
             tl = linearN20
@@ -193,26 +193,45 @@ def choose_temp(t):
 
 
 # this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
-def get_SOC_estimation(connection, imei, start, end):
+def generate_estimate(connection, imei, start, end):
     print('Generating SoC estimation for {} from {} to {}'.format(imei, start, end))
 
-    try:
-        cursor = connection.cursor(pymysql.cursors.DictCursor)
+    with connection.cursor(DictCursor) as cursor:
         # Select relevant data points
+        # This selects one sample from soc before the actual date range,
+        # so that the smoothed values are deterministic for further runs
         count = cursor.execute(
-            "SELECT Stamp AS time, BatteryVoltage AS volt, TempBattery AS temp FROM imei{} "
-            "WHERE Stamp >= '{}' AND Stamp <= '{}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0 "
-            "ORDER BY Stamp".format(imei, start, end))
+            """(SELECT *
+             FROM webike_sfink.soc
+             WHERE time < '{start}'
+             ORDER BY time DESC
+             LIMIT 1)
+            UNION
+            (SELECT
+               '{imei}'              AS imei,
+               imei.Stamp          AS time,
+               imei.BatteryVoltage AS volt,
+               soc.volt_smooth,
+               imei.TempBattery    AS temp,
+               soc.temp_smooth,
+               soc.soc,
+               soc.soc_smooth
+             FROM imei{imei} imei
+               LEFT OUTER JOIN webike_sfink.soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
+             WHERE Stamp >= '{start}' AND Stamp <= '{end}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0
+             ORDER BY Stamp ASC);"""
+                .format(imei=imei, start=start, end=end))
         print('Got {:,} samples'.format(count))
         if count < 1: return []
         socs = cursor.fetchall()
         inserted = 0
 
         # Calculate first sample, all further samples will be smoothed
-        socs[0]['volt_smooth'] = socs[0]['volt']
-        socs[0]['temp_smooth'] = socs[0]['temp']
-        socs[0]['soc'] = get_SOC_val(choose_temp(socs[0]['temp_smooth']), socs[0]['volt_smooth'])
-        socs[0]['soc_smooth'] = socs[0]['soc']
+        if socs[0]['soc_smooth'] is None:
+            socs[0]['volt_smooth'] = socs[0]['volt']
+            socs[0]['temp_smooth'] = socs[0]['temp']
+            socs[0]['soc'] = calc_soc(choose_temp(socs[0]['temp_smooth']), socs[0]['volt_smooth'])
+            socs[0]['soc_smooth'] = socs[0]['soc']
 
         last_print = datetime.now()
         for nr, (prev, cur) in enumerate(zip(socs, socs[1:])):
@@ -221,32 +240,33 @@ def get_SOC_estimation(connection, imei, start, end):
                 last_print = datetime.now()
 
             # Smooth voltage and temperature by 95%
-            cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
-            cur['temp_smooth'] = .95 * prev['temp_smooth'] + .05 * cur['temp']
-            # Run get_SOC_val on the smoothed values and re-add it to each dictionary
-            cur['soc'] = get_SOC_val(choose_temp(cur['temp_smooth']), cur['volt_smooth'])
-            # Smooth SoCs by 95%
-            cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
+            if cur['soc_smooth'] is None:
+                cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
+                cur['temp_smooth'] = .95 * prev['temp_smooth'] + .05 * cur['temp']
+                # Run get_SOC_val on the smoothed values and re-add it to each dictionary
+                cur['soc'] = calc_soc(choose_temp(cur['temp_smooth']), cur['volt_smooth'])
+                # Smooth SoCs by 95%
+                cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
 
-            cur['imei'] = imei
-            sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({}) ON DUPLICATE KEY UPDATE time=time" \
-                .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
-            res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
-            inserted += res
+                cur['imei'] = imei
+                sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({})" \
+                    .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
+                res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
+                inserted += res
 
         print("Inserted {:,} new samples".format(inserted))
-        connection.commit()
         return socs
-    except:
-        connection.rollback()
-        raise
 
 
-if __name__ == "__main__":
-    from DB import connection
-
-    for imei in IMEIS:
-        print('Processing IMEI ' + imei)
-        socs = get_SOC_estimation(connection, imei, datetime.min, datetime.now() + timedelta(days=1))
-
-    connection.close()
+def preprocess_estimates(connection):
+    print('Preprocessing SoC information for new samples')
+    with connection.cursor(DictCursor) as cursor:
+        for imei in IMEIS:
+            cursor.execute(
+                """SELECT MIN(imei.Stamp) AS min
+                FROM imei5233 imei
+                  LEFT OUTER JOIN webike_sfink.soc ON imei.Stamp = soc.time AND soc.imei = '5233'
+                WHERE soc.time IS NULL AND imei.BatteryVoltage IS NOT NULL AND imei.BatteryVoltage != 0"""
+            );
+            min_val = cursor.fetchone()['min']
+            generate_estimate(connection, imei, min_val, datetime.now() + timedelta(days=1))

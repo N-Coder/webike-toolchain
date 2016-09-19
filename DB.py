@@ -1,9 +1,4 @@
-import os
-import warnings
-
-import pymysql
 from pymysql.cursors import Cursor
-
 
 class QualifiedDictCursorMixin(object):
     # You can override this to use OrderedDict or other dict-like types.
@@ -28,15 +23,3 @@ class QualifiedDictCursorMixin(object):
 
 class QualifiedDictCursor(QualifiedDictCursorMixin, Cursor):
     """A cursor which returns results as a dictionary with keys always consisting of the fully qualified column name"""
-
-
-connection = pymysql.connect(
-    host="tornado.cs.uwaterloo.ca",
-    port=3306,
-    user=os.environ['MYSQL_USER'],
-    passwd=os.environ['MYSQL_PASSWORD'],
-    db="webike"
-)
-warnings.filterwarnings('error', category=pymysql.Warning)
-cursor = connection.cursor(pymysql.cursors.DictCursor)
-qcursor = connection.cursor(QualifiedDictCursor)
