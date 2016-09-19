@@ -59,7 +59,7 @@ def download_wunderg(connection, dates):
 
     with connection.cursor(DictCursor) as cursor:
         for entry in dates:
-            if entry['min'].time() > time():
+            if entry['min'] is None or entry['min'].time() > time():
                 __download_wunderg_metar(cursor, entry['selected_date'] - timedelta(days=1))
             __download_wunderg_metar(cursor, entry['selected_date'])
 
@@ -73,6 +73,9 @@ def __download_wunderg_metar(cursor, date):
         if mtime < (datetime.fromordinal(date.toordinal()) + timedelta(days=2)):
             print('\tRemoving outdated version of ' + file)
             os.remove(file)
+        else:
+            print('\tFile already exists, no new data available')
+            return
     if not os.path.exists(file):
         res = requests.get(URL.format(year=date.year, month=date.month, day=date.day), stream=True,
                            cookies={"Prefs": "SHOWMETAR:1"})
@@ -80,9 +83,6 @@ def __download_wunderg_metar(cursor, date):
         with open(file, 'wb') as f:
             res.raw.decode_content = True
             shutil.copyfileobj(res.raw, f)
-    else:
-        print('\tFile already exists, no new data available')
-        return
 
     with open(file, 'rt') as f:
         text = f.read()
@@ -94,11 +94,9 @@ def __download_wunderg_metar(cursor, date):
         count = 0
         for row in reader:
             time = datetime.strptime(row['DateUTC'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
-            if row['FullMetar'].startswith('METAR') or row['FullMetar'].startswith('SPECI'):
-                print('\tInserting {}: {}'.format(time, row['FullMetar']))
+            metar = row['FullMetar']
+            if metar.startswith('METAR') or metar.startswith('SPECI'):
                 count += cursor.execute(
                     "REPLACE INTO webike_sfink.weather_metar (stamp, metar, source) VALUES (%s, %s, 'wunderg')",
-                    [time, row['FullMetar']])
-            else:
-                print('\tSkipping {}: {}'.format(time, row['FullMetar']))
+                    [time, metar])
         print('\t{} rows inserted'.format(count))
