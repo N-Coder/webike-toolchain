@@ -7,7 +7,7 @@ from contextlib import contextmanager
 import pymysql
 from pymysql.cursors import Cursor, DictCursorMixin
 
-from Logging import BraceMessage as __
+from util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

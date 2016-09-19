@@ -8,8 +8,8 @@ from decimal import Decimal
 import wget
 from dateutil.relativedelta import relativedelta
 
-from DB import DictCursor
-from Logging import BraceMessage as __
+from util.DB import DictCursor
+from util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

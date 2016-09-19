@@ -4,12 +4,12 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 
-import WeatherGC
-import WeatherWU
-from Constants import IMEIS
-from DB import DictCursor, QualifiedDictCursor
-from Logging import BraceMessage as __
-from Plot import order_hists
+from data import WeatherGC
+from data import WeatherWU
+from util.Constants import IMEIS
+from util.DB import DictCursor, QualifiedDictCursor
+from util.Logging import BraceMessage as __
+from util.Plot import order_hists
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

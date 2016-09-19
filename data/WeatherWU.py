@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone, time
 import requests
 from metar import Metar
 
-from DB import DictCursor
-from Logging import BraceMessage as __
+from util.DB import DictCursor
+from util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

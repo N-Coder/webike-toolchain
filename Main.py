@@ -1,10 +1,10 @@
 import logging
 
-import DB
-import Plot
-import Trips
-import WeatherGC
-import WeatherWU
+from data import Trips
+from data import WeatherGC
+from data import WeatherWU
+from util import DB
+from util import Plot
 
 __author__ = "Niko Fink"
 assert __name__ == "__main__"
