@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pymysql.cursors import DictCursor
 
 import WeatherGC
 from Constants import IMEIS
-from DB import QualifiedDictCursor
+from DB import DictCursor, QualifiedDictCursor
 
 __author__ = 'Niko Fink'
 

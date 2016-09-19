@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import wget
 from dateutil.relativedelta import relativedelta
-from pymysql.cursors import DictCursor
+
+from DB import DictCursor
 
 CSV_HEADER = ['Date/Time', 'Year', 'Month', 'Day', 'Time', 'Data Quality', 'Temp (°C)', 'Temp Flag',
               'Dew Point Temp (°C)', 'Dew Point Temp Flag', 'Rel Hum (%)', 'Rel Hum Flag',

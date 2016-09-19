@@ -6,7 +6,8 @@ from sys import stderr
 from textwrap import indent
 
 import requests
-from pymysql.cursors import DictCursor
+
+from DB import DictCursor
 
 DOWNLOAD_DIR = 'tmp/wunderground/'
 URL = "https://www.wunderground.com/history/airport/CYKF/{year}/{month}/{day}/DailyHistory.html?format=1"

@@ -1,10 +1,10 @@
 from datetime import datetime
 
 import scipy as sp
-from pymysql.cursors import DictCursor
 from scipy.optimize import curve_fit
 
 from Constants import IMEIS
+from DB import DictCursor
 
 d = {'-20': {}, '-10': {}, '23': {}, '0': {}, '45': {}}
 
@@ -195,6 +195,7 @@ def choose_temp(t):
 # this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
 def generate_estimate(connection, imei, start, end):
     print('Generating SoC estimation for {} from {} to {}'.format(imei, start, end))
+    assert start is not None and end is not None
 
     with connection.cursor(DictCursor) as cursor:
         # Select relevant data points
@@ -276,5 +277,6 @@ def preprocess_estimates(connection):
                     .format(imei=imei)
             )
             vals = cursor.fetchone()
-            print('Missing {} samples from {} to {}'.format(vals['count'], vals['min'], vals['max']))
-            generate_estimate(connection, imei, vals['min'], vals['max'])
+            if vals['count'] > 0:
+                print('Missing {} samples from {} to {}'.format(vals['count'], vals['min'], vals['max']))
+                generate_estimate(connection, imei, vals['min'], vals['max'])
