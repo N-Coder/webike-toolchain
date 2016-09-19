@@ -1,3 +1,4 @@
+import copy
 import csv
 import os
 import shutil
@@ -5,8 +6,12 @@ from datetime import datetime, timedelta, timezone, time
 from sys import stderr
 
 import requests
+from metar import Metar
 
 from DB import DictCursor
+
+HIST_DATA = {'temp': [], 'dewpt': [], 'wind_speed': [], 'vis': [], 'press': [], 'weather_desc': [], 'weather_prec': [],
+             'weather_obsc': [], 'weather_othr': []}
 
 DOWNLOAD_DIR = 'tmp/wunderground/'
 URL = "https://www.wunderground.com/history/airport/CYKF/{year}/{month}/{day}/DailyHistory.html?format=1"
@@ -100,3 +105,57 @@ def __download_wunderg_metar(cursor, date):
                     "REPLACE INTO webike_sfink.weather_metar (stamp, metar, source) VALUES (%s, %s, 'wunderg')",
                     [time, metar])
         print('\t{} rows inserted'.format(count))
+
+
+def read_data_db(connection):
+    print('Reading weather underground data from DB')
+
+    with connection.cursor(DictCursor) as cursor:
+        cursor.execute("SELECT * FROM webike_sfink.weather_metar ORDER BY stamp DESC")
+        data = cursor.fetchall()
+        print('{} rows read from DB'.format(len(data)))
+        return data
+
+
+def extract_hist(metars):
+    hist_data = copy.deepcopy(HIST_DATA)
+    for metar in metars:
+        if isinstance(metar, dict):
+            metar = metar['metar']
+        append_hist(hist_data, metar)
+    return hist_data
+
+
+def append_hist(hist_data, metar):
+    if isinstance(metar, str):
+        metar = Metar.Metar(metar)
+    assert isinstance(metar, Metar.Metar)
+
+    if metar.temp:
+        hist_data['temp'].append(metar.temp.value("C"))
+    if metar.dewpt:
+        hist_data['dewpt'].append(metar.dewpt.value("C"))
+    if metar.wind_speed:
+        hist_data['wind_speed'].append(metar.wind_speed.value("KMH"))
+    if metar.vis:
+        hist_data['vis'].append(metar.vis.value("KM"))
+    if metar.press:
+        hist_data['press'].append(metar.press.value("MB"))
+
+    if len(metar.weather) < 1:
+        hist_data['weather_desc'].append("")
+        hist_data['weather_prec'].append("")
+        hist_data['weather_obsc'].append("")
+        hist_data['weather_othr'].append("")
+    else:
+        if len(metar.weather) > 1:
+            print("multiple weather states: " + metar.present_weather())
+        for weather in metar.weather:
+            (inten, desc, prec, obsc, othr) = weather
+            hist_data['weather_desc'].append(desc)
+            if len(prec) > 2:
+                hist_data['weather_prec'].extend([prec[i:i + 2] for i in range(0, len(prec), 2)])
+            else:
+                hist_data['weather_prec'].append(prec)
+            hist_data['weather_obsc'].append(obsc)
+            hist_data['weather_othr'].append(othr)
