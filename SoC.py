@@ -270,6 +270,26 @@ def preprocess_estimates(connection):
         for imei in IMEIS:
             print('Checking {} for missing samples'.format(imei))
             cursor.execute(
+                """SELECT
+                  MIN(Stamp)   AS min,
+                  MAX(Stamp)   AS max,
+                  COUNT(Stamp) AS count
+                FROM imei{imei}
+                WHERE BatteryVoltage IS NOT NULL AND BatteryVoltage != 0
+                UNION ALL
+                SELECT
+                  MIN(time)   AS min,
+                  MAX(time)   AS max,
+                  COUNT(time) AS count
+                FROM webike_sfink.soc
+                WHERE imei = '{imei}'""".format(imei=imei)
+            )
+            vals = cursor.fetchall()
+            if vals[0] == vals[1]:
+                print("Got enough SoC values for all samples")
+                continue
+
+            cursor.execute(
                 """SELECT MIN(imei.Stamp) AS min, MAX(imei.Stamp) AS max, COUNT(imei.Stamp) AS count
                 FROM imei{imei} imei
                   LEFT OUTER JOIN webike_sfink.soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
@@ -280,3 +300,5 @@ def preprocess_estimates(connection):
             if vals['count'] > 0:
                 print('Missing {} samples from {} to {}'.format(vals['count'], vals['min'], vals['max']))
                 generate_estimate(connection, imei, vals['min'], vals['max'])
+            else:
+                print("No missing samples")
