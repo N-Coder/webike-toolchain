@@ -9,6 +9,7 @@ import WeatherWU
 from Constants import IMEIS
 from DB import DictCursor, QualifiedDictCursor
 from Logging import BraceMessage as __
+from Plot import order_hists
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -128,16 +129,3 @@ def plot_trips(hist_data):
     plt.title("Number of Trips with certain Initial and Final State of Charge")
     plt.legend(loc='upper left')
     plt.savefig("out/trips_per_soc.png")
-
-
-def order_hists(hists):
-    """see http://stackoverflow.com/a/8764575/805569"""
-    all_ns = [hist[0] for hist in hists]
-    all_patches = [hist[2] for hist in hists]
-
-    z_orders = -np.argsort(all_ns, axis=0)
-
-    for zrow, patchrow in zip(z_orders, all_patches):
-        assert len(zrow) == len(patchrow)
-        for z_val, patch in zip(zrow, patchrow):
-            patch.set_zorder(z_val)

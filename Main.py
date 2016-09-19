@@ -1,8 +1,8 @@
 import logging
 
 import DB
+import Plot
 import Trips
-import Weather
 import WeatherGC
 import WeatherWU
 
@@ -16,7 +16,7 @@ with DB.connect() as connection:
 
     gc_db_data = WeatherGC.read_data_db(connection)
     gc_hist_data = WeatherGC.extract_hist(gc_db_data)
-    Weather.plot_weather(
+    Plot.plot_weather(
         {
             'weather': gc_hist_data,
             'trip': trip_hist_data['trip_weather']
@@ -26,7 +26,7 @@ with DB.connect() as connection:
 
     wu_db_data = WeatherWU.read_data_db(connection)
     wu_hist_data = WeatherWU.extract_hist(wu_db_data)
-    Weather.plot_weather(
+    Plot.plot_weather(
         {
             'weather': wu_hist_data,
             'trip': trip_hist_data['trip_metar']
