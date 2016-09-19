@@ -264,9 +264,10 @@ def preprocess_estimates(connection):
         for imei in IMEIS:
             cursor.execute(
                 """SELECT MIN(imei.Stamp) AS min
-                FROM imei5233 imei
-                  LEFT OUTER JOIN webike_sfink.soc ON imei.Stamp = soc.time AND soc.imei = '5233'
+                FROM imei{imei} imei
+                  LEFT OUTER JOIN webike_sfink.soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
                 WHERE soc.time IS NULL AND imei.BatteryVoltage IS NOT NULL AND imei.BatteryVoltage != 0"""
-            );
+                    .format(imei=imei)
+            )
             min_val = cursor.fetchone()['min']
             generate_estimate(connection, imei, min_val, datetime.now() + timedelta(days=1))
