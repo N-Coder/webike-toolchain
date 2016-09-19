@@ -105,7 +105,8 @@ def __download_wunderg_metar(cursor, date):
             metar = row['FullMetar']
             if metar.startswith('METAR') or metar.startswith('SPECI'):
                 count += cursor.execute(
-                    "REPLACE INTO webike_sfink.weather_metar (stamp, metar, source) VALUES (%s, %s, 'wunderg')",
+                    "INSERT INTO webike_sfink.weather_metar (stamp, metar, source) "
+                    "VALUES (%s, %s, 'wunderg') ON DUPLICATE KEY UPDATE stamp=stamp",
                     [time, metar])
         logger.info(__("{} rows inserted", count))
 

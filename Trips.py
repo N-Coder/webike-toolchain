@@ -95,9 +95,7 @@ def extract_hist(connection):
                     if key.startswith(weather_prefix):
                         WeatherGC.append_hist(hist_data['trip_weather'], key[len(weather_prefix):], val)
 
-                for key, val in trip.items():
-                    if key.startswith('metar.'):
-                        WeatherWU.append_hist(hist_data['trip_metar'], val)
+                WeatherWU.append_hist(hist_data['trip_metar'], trip['metar.metar'])
 
         return hist_data
 
