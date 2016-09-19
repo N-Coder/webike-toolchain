@@ -203,7 +203,7 @@ def generate_estimate(connection, imei, start, end):
         count = cursor.execute(
             """(SELECT *
              FROM webike_sfink.soc
-             WHERE time < '{start}'
+             WHERE time < '{start}' AND imei = '{imei}'
              ORDER BY time DESC
              LIMIT 1)
             UNION
@@ -226,12 +226,22 @@ def generate_estimate(connection, imei, start, end):
         socs = cursor.fetchall()
         inserted = 0
 
+        def insert(row):
+            row['imei'] = imei
+            sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({})" \
+                .format(", ".join(row.keys()), ", ".join(["%s"] * len(row)))
+            res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in row.values()])
+            if res != 1:
+                raise AssertionError("Illegal result {} for row {} and query\n{}".format(res, row, sql))
+            return res
+
         # Calculate first sample, all further samples will be smoothed
         if socs[0]['soc_smooth'] is None:
             socs[0]['volt_smooth'] = socs[0]['volt']
             socs[0]['temp_smooth'] = socs[0]['temp']
             socs[0]['soc'] = calc_soc(choose_temp(socs[0]['temp_smooth']), socs[0]['volt_smooth'])
             socs[0]['soc_smooth'] = socs[0]['soc']
+            inserted += insert(socs[0])
 
         last_print = datetime.now()
         for nr, (prev, cur) in enumerate(zip(socs, socs[1:])):
@@ -247,12 +257,7 @@ def generate_estimate(connection, imei, start, end):
                 cur['soc'] = calc_soc(choose_temp(cur['temp_smooth']), cur['volt_smooth'])
                 # Smooth SoCs by 95%
                 cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
-
-                cur['imei'] = imei
-                sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({})" \
-                    .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
-                res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in cur.values()])
-                inserted += res
+                inserted += insert(cur)
 
         print("Inserted {:,} new samples".format(inserted))
         return socs
@@ -262,6 +267,7 @@ def preprocess_estimates(connection):
     print('Preprocessing SoC information for new samples')
     with connection.cursor(DictCursor) as cursor:
         for imei in IMEIS:
+            print('Checking {} for missing samples'.format(imei))
             cursor.execute(
                 """SELECT MIN(imei.Stamp) AS min, MAX(imei.Stamp) AS max, COUNT(imei.Stamp) AS count
                 FROM imei{imei} imei
