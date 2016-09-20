@@ -85,62 +85,73 @@ def curr_to_ampere(val):
 
 
 with DB.connect() as connection:
-    logger.info("Preprocessing charging cycles")
+    with connection.cursor(DictCursor) as cursor:
+        logger.info("Preprocessing charging cycles")
 
-    for nr, imei in enumerate(IMEIS[10:11]):
-        logger.info(__("Preprocessing charging cycles for {}", imei))
-        if not os.path.exists(PICKLE_FILE.format(imei)):
-            print("regenerate")
-            with connection.cursor(DictCursor) as cursor:
+        for nr, imei in enumerate(IMEIS):
+            logger.info(__("Preprocessing charging cycles for {}", imei))
+            if not os.path.exists(PICKLE_FILE.format(imei)):
+                print("regenerate")
                 cursor.execute(
                     """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
                     JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-                    WHERE ChargingCurr IS NOT NULL AND ChargingCurr != 0 AND Stamp>'2015-04-01'AND Stamp<'2015-10-01'
+                    WHERE ChargingCurr IS NOT NULL AND ChargingCurr != 0
                     ORDER BY Stamp ASC"""
                         .format(imei=imei))
                 charge = cursor.fetchall()
                 logger.info(__("{} rows read from DB", len(charge)))
 
                 cursor.execute(
-                    "SELECT  start_time, end_time FROM trip{} WHERE start_time>'2015-04-01'AND start_time<'2015-10-01' ORDER BY start_time ASC"
+                    "SELECT  start_time, end_time FROM trip{} ORDER BY start_time ASC"
                         .format(imei))
                 trips = cursor.fetchall()
 
-                with open(PICKLE_FILE.format(imei), 'wb') as f:
-                    pickle.dump((charge, trips), f)
-        else:
-            print("reuse")
-            with open(PICKLE_FILE.format(imei), 'rb') as f:
-                (charge, trips) = pickle.load(f)
+                # with open(PICKLE_FILE.format(imei), 'wb') as f:
+                #     pickle.dump((charge, trips), f)
+            else:
+                print("reuse")
+                with open(PICKLE_FILE.format(imei), 'rb') as f:
+                    (charge, trips) = pickle.load(f)
 
-        cycles_curr = extract_cycles_curr(charge)
-        cycles_soc = extract_cycles_soc(charge)
+            cycles_curr = extract_cycles_curr(charge)
+            cycles_soc = extract_cycles_soc(charge)
 
-        plt.figure(nr)
-        plt.plot(
-            list([x['Stamp'] for x in charge]),
-            list([x['soc_smooth'] if 'soc_smooth' in x else -2 for x in charge]),
-            'g-'
-        )
-        plt.plot(
-            list([x['Stamp'] for x in charge]),
-            list([x['ChargingCurr_smooth'] / 200 for x in charge]),
-            'b-'
-        )
-        plt.plot(
-            list([x['Stamp'] for x in charge]),
-            list([x['soc_diff'] * 100 for x in charge]),
-            'r-'
-        )
+            for cycle in cycles_curr:
+                cursor.execute(
+                    """INSERT INTO webike_sfink.charge_cycles (imei, start_time, end_time, type)
+                  VALUES (%s, %s, %s, %s);""", imei, cycle[0]['Stamp'], cycle[1]['Stamp'], 'A')
 
-        for trip in trips:
-            plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
-        for cycle in cycles_curr:
-            plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='c', alpha=0.5, lw=0)
-        for cycle in cycles_soc:
-            plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='m', alpha=0.5, lw=0)
-        plt.title(imei)
+            for cycle in cycles_soc:
+                cursor.execute(
+                    """INSERT INTO webike_sfink.charge_cycles (imei, start_time, end_time, type)
+                  VALUES (%s, %s, %s, %s);""", imei, cycle[0]['Stamp'], cycle[1]['Stamp'], 'S')
+
+            connection.commit()
+            # plt.figure(nr)
+            # plt.plot(
+            #     list([x['Stamp'] for x in charge]),
+            #     list([x['soc_smooth'] if 'soc_smooth' in x else -2 for x in charge]),
+            #     'g-'
+            # )
+            # plt.plot(
+            #     list([x['Stamp'] for x in charge]),
+            #     list([x['ChargingCurr_smooth'] / 200 for x in charge]),
+            #     'b-'
+            # )
+            # plt.plot(
+            #     list([x['Stamp'] for x in charge]),
+            #     list([x['soc_diff'] * 100 for x in charge]),
+            #     'r-'
+            # )
+            #
+            # for trip in trips:
+            #     plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
+            # for cycle in cycles_curr:
+            #     plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='c', alpha=0.5, lw=0)
+            # for cycle in cycles_soc:
+            #     plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='m', alpha=0.5, lw=0)
+            # plt.title(imei)
 
 
-        # TOOD start/end time, duration, Initial/Final State of Charge
+            # TOOD start/end time, duration, Initial/Final State of Charge
 plt.show()
