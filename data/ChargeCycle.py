@@ -2,9 +2,12 @@ import collections
 import logging
 import os
 import pickle
-from datetime import timedelta
+from datetime import timedelta, datetime
 
+import matplotlib.dates as mdates
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+from dateutil.relativedelta import relativedelta
 
 from util import DB
 from util.Constants import IMEIS
@@ -18,14 +21,51 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
 
 
+# TODO start/end time, duration, Initial/Final State of Charge
+
+
+def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
+    if start < stop:
+        cmp = lambda a, b: a < b
+        inc = lambda a: a + step
+    else:
+        cmp = lambda a, b: a > b
+        inc = lambda a: a - step
+    yield start
+    while cmp(start, stop):
+        start = inc(start)
+        yield start
+
+
+def smooth(samples, label):
+    label_smooth = label + '_smooth'
+    last_sample = None
+    for sample in samples:
+        if not (sample and label in sample and sample[label]):
+            if not (last_sample and label_smooth in last_sample and
+                        last_sample[label_smooth]):
+                sample[label_smooth] = None
+            else:
+                sample[label_smooth] = last_sample[label_smooth]
+        else:
+            if not (last_sample and label_smooth in last_sample and
+                        last_sample[label_smooth]):
+                sample[label_smooth] = sample[label]
+            else:
+                sample[label_smooth] = .95 * last_sample[label_smooth] \
+                                       + .05 * sample[label]
+        last_sample = sample
+
+
+def curr_to_ampere(val):
+    return (val - 504) * 0.033 if val else 0
+
+
 def extract_cycles_curr(charge_samples):
     cycles = []
     charge_start = charge_end = None
     last_sample = None
     for sample in charge_samples:
-        sample['ChargingCurr_smooth'] = .95 * last_sample['ChargingCurr_smooth'] + .05 * sample['ChargingCurr'] \
-            if last_sample else sample['ChargingCurr']
-
         if not charge_start:
             if sample['ChargingCurr_smooth'] > 50:
                 charge_start = sample
@@ -80,11 +120,7 @@ def extract_cycles_soc(charge_samples):
     return cycles
 
 
-def curr_to_ampere(val):
-    return (val - 504) * 0.033 if val else 0
-
-
-with DB.connect() as connection:
+def preprocess_data(connection):
     with connection.cursor(DictCursor) as cursor:
         logger.info("Preprocessing charging cycles")
 
@@ -99,6 +135,8 @@ with DB.connect() as connection:
                     ORDER BY Stamp ASC"""
                         .format(imei=imei))
                 charge = cursor.fetchall()
+                smooth(charge, 'ChargingCurr')
+                smooth(charge, 'DischargeCurr')
                 logger.info(__("{} rows read from DB", len(charge)))
 
                 cursor.execute(
@@ -127,31 +165,77 @@ with DB.connect() as connection:
                   VALUES (%s, %s, %s, %s);""", imei, cycle[0]['Stamp'], cycle[1]['Stamp'], 'S')
 
             connection.commit()
-            # plt.figure(nr)
-            # plt.plot(
-            #     list([x['Stamp'] for x in charge]),
-            #     list([x['soc_smooth'] if 'soc_smooth' in x else -2 for x in charge]),
-            #     'g-'
-            # )
-            # plt.plot(
-            #     list([x['Stamp'] for x in charge]),
-            #     list([x['ChargingCurr_smooth'] / 200 for x in charge]),
-            #     'b-'
-            # )
-            # plt.plot(
-            #     list([x['Stamp'] for x in charge]),
-            #     list([x['soc_diff'] * 100 for x in charge]),
-            #     'r-'
-            # )
-            #
-            # for trip in trips:
-            #     plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
-            # for cycle in cycles_curr:
-            #     plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='c', alpha=0.5, lw=0)
-            # for cycle in cycles_soc:
-            #     plt.axvspan(cycle[0]['Stamp'], cycle[1]['Stamp'], color='m', alpha=0.5, lw=0)
-            # plt.title(imei)
 
 
-            # TOOD start/end time, duration, Initial/Final State of Charge
-plt.show()
+def plot_cycles(connection):
+    with connection.cursor(DictCursor) as cursor:
+        for nr, imei in enumerate(IMEIS[0:1]):
+            cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
+            charge_cycles = cursor.fetchall()
+
+            cursor.execute("SELECT * FROM trip{} ORDER BY start_time ASC".format(imei))
+            trips = cursor.fetchall()
+
+            cursor.execute("SELECT MIN(Stamp) as min, MAX(Stamp) as max FROM imei{}".format(imei))
+            limits = cursor.fetchone()
+
+            for month in daterange(limits['min'].date(), limits['max'].date() + timedelta(days=1),
+                                   relativedelta(months=1)):
+                min = month
+                max = month + relativedelta(months=1) - timedelta(seconds=1)
+                print("Plotting {} -- {}-{} from {} to {}".format(imei, month.year, month.month, min, max))
+
+                cursor.execute(
+                    """SELECT Stamp, ChargingCurr, DischargeCurr, soc_smooth FROM imei{imei}
+                    JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
+                    WHERE Stamp >= '{min}' AND Stamp <= '{max}'
+                    ORDER BY Stamp ASC"""
+                        .format(imei=imei, min=min, max=max))
+                charge_values = cursor.fetchall()
+                smooth(charge_values, 'ChargingCurr')
+                smooth(charge_values, 'DischargeCurr')
+
+                plt.clf()
+                plt.xlim(min, max)
+
+                plt.plot(
+                    list([x['Stamp'] for x in charge_values]),
+                    list([x['soc_smooth'] or -2 for x in charge_values]),
+                    'b-', label="State of Charge"
+                )
+                plt.plot(
+                    list([x['Stamp'] for x in charge_values]),
+                    list([x['ChargingCurr_smooth'] / 200 if x['ChargingCurr_smooth'] else -2 for x in charge_values]),
+                    'g-', label="Charging Current"
+                )
+                plt.plot(
+                    list([x['Stamp'] for x in charge_values]),
+                    list([curr_to_ampere(x['DischargeCurr_smooth'])
+                          if x['DischargeCurr_smooth'] else -2 for x in charge_values]),
+                    'r-', label="Discharge Current"
+                )
+
+                for trip in trips:
+                    plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
+                for cycle in charge_cycles:
+                    color = 'm' if cycle['type'] == 'A' else 'c'
+                    plt.axvspan(cycle['start_time'], cycle['end_time'], color=color, alpha=0.5, lw=0)
+
+                handles = list(plt.gca().get_legend_handles_labels()[0])
+                handles.append(mpatches.Patch(color='y', label='Trips'))
+                handles.append(mpatches.Patch(color='m', label='Charging Cycles (Current based)'))
+                handles.append(mpatches.Patch(color='c', label='Charging Cycles (SoC based)'))
+                plt.legend(handles=handles, loc='lower left')
+
+                plt.title("{} -- {}-{}".format(imei, month.year, month.month))
+                plt.xlim(min, max)
+                plt.gcf().set_size_inches(24, 10)
+                plt.tight_layout()
+                plt.gca().xaxis.set_major_locator(mdates.DayLocator())
+                plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d'))
+                plt.savefig("../out/cc/{}-{}-{}.png".format(imei, month.year, month.month), dpi=300,
+                            bbox_inches='tight')
+
+
+with DB.connect() as mconnection:
+    plot_cycles(mconnection)
