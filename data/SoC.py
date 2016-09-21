@@ -8,8 +8,13 @@ from util.Constants import IMEIS
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
 
-__author__ = "Niko Fink"
+__author__ = "Tommy Carpenter, Niko Fink"
 logger = logging.getLogger(__name__)
+
+########################################################################################################################
+# Constants developed by Tommy Carpenter for his PhD thesis
+# see http://hdl.handle.net/10012/9096
+########################################################################################################################
 
 d = {'-20': {}, '-10': {}, '23': {}, '0': {}, '45': {}}
 
@@ -157,8 +162,13 @@ threeLineP45, parm_cov = sp.optimize.curve_fit(
      for i in range(0, len(d['45']['Xs']))])
 
 
-# this is a modified version of Tommy's SOCVals, with all unnecessary code thrown out
+########################################################################################################################
+
 def calc_soc(temp, volt):
+    """ Calculate the state of charge of one the ebike's batteries from its given temperature and voltage.
+    This is a modified version of Tommy's SOCVals, with all unnecessary code thrown out.
+    see https://github.com/webike-dev/webike/blob/master/blizzard/SOC.py
+    """
     if temp == -20 or temp == -10:
         if temp == -20:
             tl = linearN20
@@ -186,9 +196,9 @@ def calc_soc(temp, volt):
         elif volt >= y[46]:
             return clip(model_func2_3Line(volt, m1, b1, m2, b2, m3, b3, 2))
         else:
-            """Mode 3 is actually invalid. While in mode 3, the voltage drops so rapidly, buy the capacity in MaH doesn't,
-            so the equation giving the capacity in wh, which multiplies the two, actually starts INCREASING.
-            To solve this, we will just linearly interpolate to 0 from the starting point of mode 3. """
+            # Mode 3 is actually invalid. While in mode 3, the voltage drops so rapidly, buy the capacity in MaH
+            # doesn't, so the equation giving the capacity in wh, which multiplies the two, actually starts INCREASING.
+            # To solve this, we will just linearly interpolate to 0 from the starting point of mode 3.
             return clip(model_func2_3Line(y[46], m1, b1, m2, b2, m3, b3, 2))
             # return clip(model_func2_3Line(volt, m1, b1, m2, b2, m3, b3, 3)) #this does not work SOC actually increases
 
@@ -197,8 +207,11 @@ def choose_temp(t):
     return min([-20, -10, 0, 23, 45], key=lambda x: abs(x - t))
 
 
-# this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
 def generate_estimate(connection, imei, start, end):
+    """ Calculate the state of charge of one the ebike's batteries from its temperature and voltage for the given timespan
+    this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
+    see https://github.com/webike-dev/webike/blob/master/blizzard/grapher.py
+    """
     logger.info(__("Generating SoC estimation for {} from {} to {}", imei, start, end))
     assert start is not None and end is not None
 
@@ -270,10 +283,12 @@ def generate_estimate(connection, imei, start, end):
 
 
 def preprocess_estimates(connection):
+    """Make sure that the DB contains SoC information for each recorded sample"""
     logger.info("Preprocessing SoC information for new samples")
     with connection.cursor(DictCursor) as cursor:
         for imei in IMEIS:
             logger.info(__("Checking {} for missing samples", imei))
+            # Check if the min/max/count in the samples and soc estimations tables differ
             cursor.execute(
                 """SELECT
                   MIN(Stamp)   AS min,
@@ -290,10 +305,16 @@ def preprocess_estimates(connection):
                 WHERE imei = '{imei}'""".format(imei=imei)
             )
             vals = cursor.fetchall()
+            # If they are the same, we can assume that each sample has a matching SoC estimation
             if vals[0] == vals[1]:
                 logger.info("Got enough SoC values for all samples")
                 continue
 
+            # If the min/max/count of the samples and soc estimations differ, we have to find out, which samples
+            # are missing their soc estimation.
+            # As new, unprocessed samples usually appear in sequence, we are faster if we process all samples
+            # from first to last instead of handling each unprocessed sample on its own.
+            # This query finds the first and the last unprocessed sample.
             cursor.execute(
                 """SELECT MIN(imei.Stamp) AS min, MAX(imei.Stamp) AS max, COUNT(imei.Stamp) AS count
                 FROM imei{imei} imei
@@ -302,8 +323,7 @@ def preprocess_estimates(connection):
                     .format(imei=imei)
             )
             vals = cursor.fetchone()
-            if vals['count'] > 0:
-                logger.info(__("Missing {} samples from {} to {}'", vals['count'], vals['min'], vals['max']))
-                generate_estimate(connection, imei, vals['min'], vals['max'])
-            else:
-                logger.info("No missing samples")
+            assert vals['count'] > 0
+            logger.info(__("Missing {} samples from {} to {}'", vals['count'], vals['min'], vals['max']))
+            # Generate the estimate for all samples in the found timeframe
+            generate_estimate(connection, imei, vals['min'], vals['max'])

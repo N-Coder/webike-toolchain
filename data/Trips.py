@@ -98,6 +98,8 @@ def extract_hist(connection):
 
                 WeatherWU.append_hist(hist_data['trip_metar'], trip['metar.metar'])
 
+                # TODO distance, duration
+
         return hist_data
 
 

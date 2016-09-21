@@ -39,7 +39,7 @@ def download_data():
     for year in range(2014, datetime.now().year + 1):
         for month in range(1, 12 + 1):
             file = "{}{}-{}.csv".format(DOWNLOAD_DIR, year, month)
-            end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=+1)
+            end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=1)
 
             if datetime(year=year, month=month, day=1) > datetime.now():  # don't download future months
                 continue

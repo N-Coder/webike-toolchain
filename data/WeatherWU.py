@@ -22,6 +22,7 @@ URL = "https://www.wunderground.com/history/airport/CYKF/{year}/{month}/{day}/Da
 
 
 def insert_navlost(connection):
+    """Function for the one-time import of METAR data from navlost.eu"""
     logger.info("Loading navlost data")
     with connection.cursor(DictCursor) as cursor:
         with open("tmp/f0b74520-f7df-45e4-a596-f4392296296a.csv", 'rt') as f:
@@ -67,7 +68,9 @@ def download_wunderg(connection, dates):
 
     with connection.cursor(DictCursor) as cursor:
         for entry in dates:
-            if entry['min'] is None or entry['min'].time() > time():
+            # due to differences in the time zones, entries in the early morning in UTC are still on
+            # the previous day in EST, so download the previous day, too
+            if entry['min'] is None or entry['min'].time() > time(hour=0, minute=0):
                 __download_wunderg_metar(cursor, entry['selected_date'] - timedelta(days=1))
             __download_wunderg_metar(cursor, entry['selected_date'])
 

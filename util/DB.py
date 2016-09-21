@@ -41,7 +41,7 @@ class StopwatchCursorMixin(object):
             res = super(StopwatchCursorMixin, self)._query(q)
             dur = time.perf_counter() - start
             if dur > 2:
-                logger.debug(__("Took {:.2f}s for executing query affecting {} rows",
+                logger.debug(__("Took {:.2f}s for executing query affecting {:,} rows",
                                 dur, res))
             return res
         except:
