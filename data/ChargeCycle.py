@@ -1,6 +1,6 @@
 import collections
 import logging
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
@@ -112,6 +112,18 @@ def extract_cycles_curr(charge_samples,
     return cycles, discarded_cycles
 
 
+def can_merge(cycles, new_start, new_end, merge_within):
+    if len(cycles) < 1: return False
+    last_start, last_end = cycles[-1]
+    gap = new_start['Stamp'] - last_end['Stamp']
+    # only merge if the time gap between the two cycles is less than merge_within
+    if gap > merge_within: return False
+    # don't merge small samples with a big gap between them
+    if new_end['Stamp'] - new_start['Stamp'] < gap: return False
+    if last_end['Stamp'] - last_start['Stamp'] < gap: return False
+    return True
+
+
 def extract_cycles_soc(charge_samples,
                        derivate_span=10, charge_thresh_start=0.001, charge_thresh_end=0.001,
                        max_sample_delay=timedelta(minutes=10), min_charge_time=timedelta(minutes=30),
@@ -153,12 +165,11 @@ def extract_cycles_soc(charge_samples,
                 charge_end = last_sample
 
             if charge_end:
-                if len(cycles) > 0 and cycles[-1][1]['Stamp'] - charge_start['Stamp'] < merge_within:
+                if can_merge(cycles, charge_start, charge_end, merge_within):
                     # merge with previous cycle if they are close together
                     cycles[-1] = (cycles[-1][0], charge_end)
                 else:
-                    if len(discarded_cycles) > 0 \
-                            and discarded_cycles[-1][1]['Stamp'] - charge_start['Stamp'] < merge_within:
+                    if can_merge(discarded_cycles, charge_start, charge_end, merge_within):
                         # merge with previous discarded cycle if they are close together
                         # and check again whether they should be added altogether
                         charge_start = discarded_cycles[-1][0]
@@ -229,8 +240,11 @@ def plot_cycles(connection):
 
             cursor.execute("SELECT MIN(Stamp) as min, MAX(Stamp) as max FROM imei{}".format(imei))
             limits = cursor.fetchone()
+            if not limits['min']:
+                # FIXME weird MySQL error, non-null column Stamp is null for some tables
+                limits['min'] = date(year=2014, month=1, day=1)
 
-            for month in daterange(limits['min'].date(), limits['max'].date() + timedelta(days=1),
+            for month in daterange(date, limits['max'].date() + timedelta(days=1),
                                    relativedelta(months=1)):
                 min = month
                 max = month + relativedelta(months=1) - timedelta(seconds=1)
