@@ -1,6 +1,6 @@
 import collections
 import logging
-from datetime import timedelta, datetime, date
+from datetime import timedelta, datetime
 
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from dateutil.relativedelta import relativedelta
 
 from util import DB
-from util.Constants import IMEIS
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
 
@@ -76,38 +75,50 @@ def discharge_curr_to_ampere(val):
 
 
 def extract_cycles_curr(charge_samples,
-                        charge_thresh_start=50, charge_thresh_end=50,
+                        charge_thresh_start=50, charge_thresh_end=50, min_charge_samples=100,
                         max_sample_delay=timedelta(minutes=10), min_charge_time=timedelta(minutes=10)):
-    """Detect charging cycles based on the smoothed ChargingCurr."""
+    """Detect charging cycles based on the ChargingCurr."""
     cycles = []
     discarded_cycles = []
     charge_start = charge_end = None
+    charge_sample_count = 0
+    charge_avg_curr = 0
 
     last_sample = None
     for sample in charge_samples:
         # did charging start?
         if not charge_start:
-            if sample['ChargingCurr_smooth'] > charge_thresh_start:
+            if sample['ChargingCurr'] > charge_thresh_start:
                 # yes, because ChargingCurr is high
                 charge_start = sample
+                charge_sample_count = 1
+                charge_avg_curr = sample['ChargingCurr']
 
         # did charging stop?
         else:
-            if sample['ChargingCurr_smooth'] < charge_thresh_end:
+            if sample['ChargingCurr'] < charge_thresh_end:
                 # yes, because ChargingCurr is back to normal
-                charge_end = sample
+                charge_end = last_sample
             elif sample['Stamp'] - last_sample['Stamp'] > max_sample_delay:
                 # yes, because we didn't get a sample for the last few mins
                 charge_end = last_sample
+            else:
+                # nope, continue counting
+                charge_sample_count += 1
+                charge_avg_curr = (charge_avg_curr + sample['ChargingCurr']) / 2
 
             if charge_end:
-                # only count as charging cycle if it lasts for more than a few mins
-                if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time:
-                    cycles.append((charge_start, charge_end))
+                cycle = (charge_start, charge_end, charge_sample_count, charge_avg_curr)
+                # only count as charging cycle if it lasts for more than a few mins and we got enough samples
+                if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time \
+                        and charge_sample_count > min_charge_samples:
+                    cycles.append(cycle)
                 else:
-                    discarded_cycles.append((charge_start, charge_end))
+                    discarded_cycles.append(cycle)
                 charge_start = None
                 charge_end = None
+                charge_sample_count = 0
+                charge_avg_curr = 0
         last_sample = sample
     return cycles, discarded_cycles
 
@@ -193,7 +204,7 @@ def extract_cycles_soc(charge_samples,
 # TODO validate min delta time/value and threshold, check for collision with trips
 def preprocess_cycles(connection):
     with connection.cursor(DictCursor) as cursor:
-        for nr, imei in enumerate(IMEIS):
+        for nr, imei in enumerate(['7710']):
             logger.info(__("Preprocessing charging cycles for {}", imei))
             cursor.execute(
                 """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
@@ -203,26 +214,26 @@ def preprocess_cycles(connection):
                     .format(imei=imei))
             charge = cursor.fetchall()
             logger.info(__("Preparing the {} rows read from DB for processing", len(charge)))
-            smooth(charge, 'ChargingCurr')
-            smooth(charge, 'DischargeCurr')
 
             logger.info("Detecting charging cycles based on current")
             cycles_curr, cycles_curr_disc = extract_cycles_curr(charge)
             logger.info("Detecting charging cycles based on state of charge")
             cycles_soc, cycles_soc_disc = extract_cycles_soc(charge)
 
-            cycles_curr = [(s, e, 'A') for (s, e) in cycles_curr]
-            cycles_curr_disc = [(s, e, 'B') for (s, e) in cycles_curr_disc]
-            cycles_soc = [(s, e, 'S') for (s, e) in cycles_soc]
-            cycles_soc_disc = [(s, e, 'T') for (s, e) in cycles_soc_disc]
+            cycles_curr = [(s, e, 'A', x, y) for (s, e, x, y) in cycles_curr]
+            cycles_curr_disc = [(s, e, 'B', x, y) for (s, e, x, y) in cycles_curr_disc]
+            cycles_soc = [(s, e, 'S', None, None) for (s, e) in cycles_soc]
+            cycles_soc_disc = [(s, e, 'T', None, None) for (s, e) in cycles_soc_disc]
 
             logger.info(__("Writing ({} + {} + {} + {} = {}) detected cycles to DB",
                            len(cycles_curr), len(cycles_curr_disc), len(cycles_soc), len(cycles_soc_disc),
                            len(cycles_curr) + len(cycles_curr_disc) + len(cycles_soc) + len(cycles_soc_disc)))
             for cycle in cycles_curr + cycles_curr_disc + cycles_soc + cycles_soc_disc:
                 cursor.execute(
-                    """INSERT INTO webike_sfink.charge_cycles (imei, start_time, end_time, type)
-                  VALUES (%s, %s, %s, %s);""", [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2]])
+                    """INSERT INTO webike_sfink.charge_cycles
+                    (imei, start_time, end_time, type, sample_count,avg_thresh_val)
+                    VALUES (%s, %s, %s, %s);""",
+                    [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], cycle[4]])
 
 
 CYCLE_TYPE_COLORS = {'A': 'm', 'B': '#550055', 'S': 'c', 'T': '#005555'}
@@ -230,7 +241,7 @@ CYCLE_TYPE_COLORS = {'A': 'm', 'B': '#550055', 'S': 'c', 'T': '#005555'}
 
 def plot_cycles(connection):
     with connection.cursor(DictCursor) as cursor:
-        for nr, imei in enumerate(IMEIS):
+        for nr, imei in enumerate(['7710']):
             logger.info(__("Plotting charging cycles for {}", imei))
             cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
             charge_cycles = cursor.fetchall()
@@ -242,7 +253,7 @@ def plot_cycles(connection):
             limits = cursor.fetchone()
             if not limits['min']:
                 # FIXME weird MySQL error, non-null column Stamp is null for some tables
-                limits['min'] = date(year=2014, month=1, day=1)
+                limits['min'] = datetime(year=2014, month=1, day=1)
 
             for month in daterange(limits['min'].date(), limits['max'].date() + timedelta(days=1),
                                    relativedelta(months=1)):
@@ -258,8 +269,6 @@ def plot_cycles(connection):
                         .format(imei=imei, min=min, max=max))
                 charge_values = cursor.fetchall()
                 logger.debug(__("Preparing the {} rows read from DB for plotting", len(charge_values)))
-                smooth(charge_values, 'ChargingCurr')
-                smooth(charge_values, 'DischargeCurr')
 
                 logger.debug("Graphing data")
                 plt.clf()
@@ -272,13 +281,13 @@ def plot_cycles(connection):
                 )
                 plt.plot(
                     list([x['Stamp'] for x in charge_values]),
-                    list([x['ChargingCurr_smooth'] / 200 if x['ChargingCurr_smooth'] else -2 for x in charge_values]),
+                    list([x['ChargingCurr'] / 200 if x['ChargingCurr'] else -2 for x in charge_values]),
                     'g-', label="Charging Current", alpha=0.9
                 )
                 plt.plot(
                     list([x['Stamp'] for x in charge_values]),
-                    list([discharge_curr_to_ampere(x['DischargeCurr_smooth'])
-                          if x['DischargeCurr_smooth'] else -2 for x in charge_values]),
+                    list([discharge_curr_to_ampere(x['DischargeCurr'])
+                          if x['DischargeCurr'] else -2 for x in charge_values]),
                     'r-', label="Discharge Current", alpha=0.9
                 )
 
@@ -290,8 +299,8 @@ def plot_cycles(connection):
 
                 handles = list(plt.gca().get_legend_handles_labels()[0])
                 handles.append(mpatches.Patch(color='y', label='Trips'))
-                handles.append(mpatches.Patch(color='m', label='Charging Cycles (Current based)'))
-                handles.append(mpatches.Patch(color='c', label='Charging Cycles (SoC based)'))
+                handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['A'], label='Charging Cycles (Current based)'))
+                handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['S'], label='Charging Cycles (SoC based)'))
                 plt.legend(handles=handles, loc='best')
 
                 file = "../out/cc/{}-{}-{}.png".format(imei, month.year, month.month)
