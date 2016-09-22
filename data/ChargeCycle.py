@@ -15,6 +15,8 @@ __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
 
+CYCLE_TYPE_COLORS = {'A': 'm', 'B': '#550055', 'S': 'c', 'T': '#005555', 'M': '#999999'}
+
 
 # TODO start/end time, duration, Initial/Final State of Charge
 
@@ -27,9 +29,10 @@ def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
         cmp = lambda a, b: a > b
         inc = lambda a: a - step
     yield start
+    start = inc(start)
     while cmp(start, stop):
-        start = inc(start)
         yield start
+        start = inc(start)
 
 
 def smooth(samples, label, label_smooth=None, alpha=.95, default_value=None):
@@ -74,8 +77,64 @@ def discharge_curr_to_ampere(val):
     return (val - 504) * 0.033 if val else 0
 
 
+def can_merge(last_cycle, new_cycle, merge_within):
+    # if last_cycle is actually a list, use the last value
+    if isinstance(last_cycle, collections.Sequence) and not isinstance(last_cycle, tuple):
+        if len(last_cycle) < 1: return False
+        last_cycle = last_cycle[-1]
+
+    last_start = last_cycle[0]['Stamp']
+    last_end = last_cycle[1]['Stamp']
+    new_start = new_cycle[0]['Stamp']
+    new_end = new_cycle[1]['Stamp']
+
+    # if both ranges intersect, they can for sure be merged
+    if max(last_start, new_start) <= min(last_end, new_end): return True
+
+    gap = new_start - last_end
+    assert gap > timedelta(seconds=0), "new_cycle ({}) must start after last_cycle ({})".format(last_cycle, new_cycle)
+    # only merge if the time gap between the two cycles is less than merge_within
+    if gap > merge_within: return False
+    # don't merge small samples with a big gap between them
+    if new_end - new_start < gap: return False
+    if last_end - last_start < gap: return False
+    return True
+
+
+def merge_cycles(cycles_a, cycles_b, merge_within=timedelta(minutes=30)):
+    merged = [None] * (len(cycles_a) + len(cycles_b))
+    a = b = m = 0
+    while a < len(cycles_a) and b < len(cycles_b):
+        first = cycles_a[a]
+        second = cycles_b[b]
+        if first[0]['Stamp'] < second[0]['Stamp']:
+            a += 1
+        else:
+            first, second = second, first
+            b += 1
+
+        if can_merge(first, second, merge_within):
+            start_time = first[0]['Stamp']  # start_time = first.start_time
+            end_time = second[1]['Stamp']  # end_time = second.end_time
+            sample_count = first[2] + second[2]  # samples_count ~= sum(samples_counts)
+            thresh_value = second[0]['Stamp'] - first[1]['Stamp']  # thresh_value = time gap
+            merged[m] = (start_time, end_time, sample_count, thresh_value, 'M')  # type = merged
+        else:
+            merged[m] = first
+        m += 1
+    while a < len(cycles_a):
+        merged[m] = cycles_a[a]
+        a += 1
+        m += 1
+    while b < len(cycles_b):
+        merged[m] = cycles_b[b]
+        b += 1
+        m += 1
+    return merged[0:m]
+
+
 def extract_cycles_curr(charge_samples,
-                        charge_thresh_start=50, charge_thresh_end=50, min_charge_samples=100,
+                        charge_thresh_start=50, charge_thresh_end=50, min_charge_samples=100, min_charge_amount=0.05,
                         max_sample_delay=timedelta(minutes=10), min_charge_time=timedelta(minutes=10)):
     """Detect charging cycles based on the ChargingCurr."""
     cycles = []
@@ -109,9 +168,11 @@ def extract_cycles_curr(charge_samples,
 
             if charge_end:
                 cycle = (charge_start, charge_end, charge_sample_count, charge_avg_curr)
-                # only count as charging cycle if it lasts for more than a few mins and we got enough samples
+                # only count as charging cycle if it lasts for more than a few mins, we got enough samples
+                # and we actually increased the SoC
                 if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time \
-                        and charge_sample_count > min_charge_samples:
+                        and charge_sample_count > min_charge_samples \
+                        and charge_end['soc_smooth'] - charge_start['soc_smooth'] > min_charge_amount:
                     cycles.append(cycle)
                 else:
                     discarded_cycles.append(cycle)
@@ -123,26 +184,15 @@ def extract_cycles_curr(charge_samples,
     return cycles, discarded_cycles
 
 
-def can_merge(cycles, new_start, new_end, merge_within):
-    if len(cycles) < 1: return False
-    last_start, last_end = cycles[-1]
-    gap = new_start['Stamp'] - last_end['Stamp']
-    # only merge if the time gap between the two cycles is less than merge_within
-    if gap > merge_within: return False
-    # don't merge small samples with a big gap between them
-    if new_end['Stamp'] - new_start['Stamp'] < gap: return False
-    if last_end['Stamp'] - last_start['Stamp'] < gap: return False
-    return True
-
-
 def extract_cycles_soc(charge_samples,
-                       derivate_span=10, charge_thresh_start=0.001, charge_thresh_end=0.001,
+                       derivate_span=10, charge_thresh_start=0.001, charge_thresh_end=0.001, min_charge_samples=100,
                        max_sample_delay=timedelta(minutes=10), min_charge_time=timedelta(minutes=30),
                        min_charge_amount=0.05, merge_within=timedelta(minutes=30)):
     """Detect charging cycles based on an increasing state of charge."""
     cycles = []
     discarded_cycles = []
     charge_start = charge_end = None
+    charge_sample_count = 0
 
     soc_history = collections.deque(maxlen=derivate_span)
     last_sample = None
@@ -165,6 +215,7 @@ def extract_cycles_soc(charge_samples,
             if sample['soc_diff'] > charge_thresh_start:
                 # yes, because SoC is increasing
                 charge_start = sample
+                charge_sample_count = 1
 
         # did charging stop?
         else:
@@ -174,28 +225,37 @@ def extract_cycles_soc(charge_samples,
             elif sample['Stamp'] - last_sample['Stamp'] > max_sample_delay:
                 # yes, because we didn't get a sample for the last few mins
                 charge_end = last_sample
+            else:
+                # nope, continue counting
+                charge_sample_count += 1
 
             if charge_end:
-                if can_merge(cycles, charge_start, charge_end, merge_within):
+                if can_merge(cycles, (charge_start, charge_end), merge_within):
                     # merge with previous cycle if they are close together
-                    cycles[-1] = (cycles[-1][0], charge_end)
+                    charge_amount = charge_end['soc_smooth'] - cycles[-1][0]['soc_smooth']
+                    cycles[-1] = (cycles[-1][0], charge_end, cycles[-1][3] + charge_sample_count, charge_amount)
                 else:
-                    if can_merge(discarded_cycles, charge_start, charge_end, merge_within):
+                    if can_merge(discarded_cycles, (charge_start, charge_end), merge_within):
                         # merge with previous discarded cycle if they are close together
                         # and check again whether they should be added altogether
                         charge_start = discarded_cycles[-1][0]
+                        charge_sample_count += discarded_cycles[-1][2]
                         del discarded_cycles[-1]
 
                     if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time \
+                            and charge_sample_count > min_charge_samples \
                             and charge_end['soc_smooth'] - charge_start['soc_smooth'] > min_charge_amount:
-                        # only count as charging cycle if it lasts for more than a few mins
+                        # only count as charging cycle if it lasts for more than a few mins, we got enough samples
                         # and actually increased the SoC
-                        cycles.append((charge_start, charge_end))
+                        cycles.append((charge_start, charge_end, charge_sample_count,
+                                       charge_end['soc_smooth'] - charge_start['soc_smooth']))
                     else:
-                        discarded_cycles.append((charge_start, charge_end))
+                        discarded_cycles.append((charge_start, charge_end, charge_sample_count,
+                                                 charge_end['soc_smooth'] - charge_start['soc_smooth']))
 
                 charge_start = None
                 charge_end = None
+                charge_sample_count = 0
 
         last_sample = sample
     return cycles, discarded_cycles
@@ -220,23 +280,27 @@ def preprocess_cycles(connection):
             logger.info("Detecting charging cycles based on state of charge")
             cycles_soc, cycles_soc_disc = extract_cycles_soc(charge)
 
-            cycles_curr = [(s, e, 'A', x, y) for (s, e, x, y) in cycles_curr]
-            cycles_curr_disc = [(s, e, 'B', x, y) for (s, e, x, y) in cycles_curr_disc]
-            cycles_soc = [(s, e, 'S', None, None) for (s, e) in cycles_soc]
-            cycles_soc_disc = [(s, e, 'T', None, None) for (s, e) in cycles_soc_disc]
+            # (start, end, sample count, threshold value, type)
+            cycles_curr = [(s, e, x, y, 'A') for (s, e, x, y) in cycles_curr]
+            cycles_curr_disc = [(s, e, x, y, 'B') for (s, e, x, y) in cycles_curr_disc]
+            cycles_soc = [(s, e, x, y, 'S') for (s, e, x, y) in cycles_soc]
+            cycles_soc_disc = [(s, e, x, y, 'T') for (s, e, x, y) in cycles_soc_disc]
+            # and actually, after working on the thresholds for a long time, the cycles now have pretty nice curves ;D
+
+            cycles_merged = merge_cycles(cycles_curr, cycles_soc)
+            logger.info(__("Merged {} + {} = {} detected cycles to {} non-overlapping cycles",
+                           len(cycles_curr), len(cycles_soc), len(cycles_curr) + len(cycles_soc), len(cycles_merged)))
 
             logger.info(__("Writing ({} + {} + {} + {} = {}) detected cycles to DB",
                            len(cycles_curr), len(cycles_curr_disc), len(cycles_soc), len(cycles_soc_disc),
                            len(cycles_curr) + len(cycles_curr_disc) + len(cycles_soc) + len(cycles_soc_disc)))
-            for cycle in cycles_curr + cycles_curr_disc + cycles_soc + cycles_soc_disc:
+
+            for cycle in cycles_merged + cycles_curr_disc + cycles_soc_disc:
                 cursor.execute(
                     """INSERT INTO webike_sfink.charge_cycles
-                    (imei, start_time, end_time, type, sample_count,avg_thresh_val)
-                    VALUES (%s, %s, %s, %s);""",
+                    (imei, start_time, end_time, sample_count, avg_thresh_val, type)
+                    VALUES (%s, %s, %s, %s, %s, %s);""",
                     [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], cycle[4]])
-
-
-CYCLE_TYPE_COLORS = {'A': 'm', 'B': '#550055', 'S': 'c', 'T': '#005555'}
 
 
 def plot_cycles(connection):
@@ -307,7 +371,7 @@ def plot_cycles(connection):
                 logger.debug(__("Writing graph to {}", file))
                 plt.title("{} -- {}-{}".format(imei, month.year, month.month))
                 plt.xlim(min, max)
-                plt.ylim(-1, 2)
+                plt.ylim(-3, 5)
                 plt.gcf().set_size_inches(24, 10)
                 plt.tight_layout()
                 plt.gca().xaxis.set_major_locator(mdates.DayLocator())
