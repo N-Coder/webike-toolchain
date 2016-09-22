@@ -15,7 +15,7 @@ from util.Plot import order_hists
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 
-HIST_DATA = {'start_times': [], 'distances': [], 'initial_soc': [], 'final_soc': [],
+HIST_DATA = {'start_times': [], 'distances': [], 'durations': [], 'initial_soc': [], 'final_soc': [],
              'trip_weather': copy.deepcopy(WeatherGC.HIST_DATA), 'trip_metar': copy.deepcopy(WeatherWU.HIST_DATA)}
 
 
@@ -74,15 +74,17 @@ def extract_hist(connection):
                 "FROM webike_sfink.trips trip "
                 "  LEFT OUTER JOIN imei{imei} first_sample ON first_sample.Stamp = trip.start_time "
                 "  LEFT OUTER JOIN imei{imei} last_sample ON last_sample.Stamp = trip.end_time "
-                "  LEFT OUTER JOIN webike_sfink.soc first_soc ON first_soc.time = trip.start_time AND first_soc.imei = '{imei}' "
-                "  LEFT OUTER JOIN webike_sfink.soc last_soc ON last_soc.time = trip.end_time AND last_soc.imei = '{imei}' "
+                "  LEFT OUTER JOIN webike_sfink.soc first_soc ON first_soc.time = trip.start_time"
+                "                                            AND first_soc.imei = '{imei}' "
+                "  LEFT OUTER JOIN webike_sfink.soc last_soc ON last_soc.time = trip.end_time"
+                "                                           AND last_soc.imei = '{imei}' "
                 "  LEFT OUTER JOIN webike_sfink.weather weather ON trip.weather = weather.datetime "
                 "  LEFT OUTER JOIN webike_sfink.weather_metar metar ON trip.metar = metar.stamp "
                 "WHERE trip.imei = '{imei}'".format(imei=imei))
             trips = qcursor.fetchall()
             for trip in trips:
                 hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
-                hist_data['durations'].append(trip['first_sample.Stamp'] - trip['last_sample.Stamp'])
+                hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
@@ -99,9 +101,6 @@ def extract_hist(connection):
                         WeatherGC.append_hist(hist_data['trip_weather'], key[len(weather_prefix):], val)
 
                 WeatherWU.append_hist(hist_data['trip_metar'], trip['metar.metar'])
-
-                # TODO distance, duration
-
         return hist_data
 
 
