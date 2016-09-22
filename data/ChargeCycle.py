@@ -244,7 +244,7 @@ def plot_cycles(connection):
                 # FIXME weird MySQL error, non-null column Stamp is null for some tables
                 limits['min'] = date(year=2014, month=1, day=1)
 
-            for month in daterange(date, limits['max'].date() + timedelta(days=1),
+            for month in daterange(limits['min'].date(), limits['max'].date() + timedelta(days=1),
                                    relativedelta(months=1)):
                 min = month
                 max = month + relativedelta(months=1) - timedelta(seconds=1)
