@@ -1,5 +1,6 @@
 import copy
 import logging
+from datetime import timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -81,6 +82,7 @@ def extract_hist(connection):
             trips = qcursor.fetchall()
             for trip in trips:
                 hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
+                hist_data['durations'].append(trip['first_sample.Stamp'] - trip['last_sample.Stamp'])
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
@@ -113,11 +115,18 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_hour.png")
 
     plt.clf()
-    plt.hist(hist_data['distances'], bins=25)
-    plt.xlabel("Distance")
+    plt.hist(hist_data['distances'], range=(0, 15), bins=15)
+    plt.xlabel("Distance in km")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Distance")
     plt.savefig("out/trips_per_distance.png")
+
+    plt.clf()
+    plt.hist([x / timedelta(minutes=1) for x in hist_data['durations']], range=(0, 180), bins=18)
+    plt.xlabel("Duration in Minutes")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Duration")
+    plt.savefig("out/trips_per_duration.png")
 
     plt.clf()
     bins = np.linspace(
