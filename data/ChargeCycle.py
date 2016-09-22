@@ -135,6 +135,10 @@ def plot_cycles_timeline(connection):
                         .format(imei=imei, min=min, max=max))
                 charge_values = cursor.fetchall()
 
+                if len(charge_values) < 100:
+                    logger.debug(__("Skipping sparse month with only {} rows", len(charge_values)))
+                    continue
+
                 logger.debug(__("Generating graph from {} rows", len(charge_values)))
                 plt.clf()
                 plt.xlim(min, max)
