@@ -147,23 +147,23 @@ linear model. ignore first 5 and last 6, corresponding to modes 1 and 3, when tr
 """
 linearN20, _ = sp.optimize.curve_fit(
     model_funcLinear, d['-20']['Ys'][5:47],
-    [integrate_box(d['-20'], i) for i in range(5, 47)])
+    [integrate_riemann(d['-20'], i) for i in range(5, 47)])
 linearN10, _ = sp.optimize.curve_fit(
     model_funcLinear, d['-10']['Ys'][5:47],
-    [integrate_box(d['-10'], i) for i in range(5, 47)])
+    [integrate_riemann(d['-10'], i) for i in range(5, 47)])
 
 """
 three line model
 """
 threeLine0, _ = sp.optimize.curve_fit(
     model_func3Line, d['0']['Ys'],
-    [integrate_box(d['0'], i) for i in range(0, len(d['0']['Xs']))])
+    [integrate_riemann(d['0'], i) for i in range(0, len(d['0']['Xs']))])
 threeLineP23, _ = sp.optimize.curve_fit(
     model_func3Line, d['23']['Ys'],
-    [integrate_box(d['23'], i) for i in range(0, len(d['23']['Xs']))])
+    [integrate_riemann(d['23'], i) for i in range(0, len(d['23']['Xs']))])
 threeLineP45, _ = sp.optimize.curve_fit(
     model_func3Line, d['45']['Ys'],
-    [integrate_box(d['45'], i) for i in range(0, len(d['45']['Xs']))])
+    [integrate_riemann(d['45'], i) for i in range(0, len(d['45']['Xs']))])
 
 
 ########################################################################################################################
