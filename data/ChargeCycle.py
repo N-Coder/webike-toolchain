@@ -1,5 +1,5 @@
 import logging
-from datetime import timedelta, datetime
+from datetime import timedelta
 
 from util import DB
 from util.Constants import IMEIS
@@ -9,21 +9,6 @@ from util.Logging import BraceMessage as __
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
-
-
-def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
-    """Similar to :py:func:`builtins.range`, but for dates"""
-    if start < stop:
-        cmp = lambda a, b: a < b
-        inc = lambda a: a + step
-    else:
-        cmp = lambda a, b: a > b
-        inc = lambda a: a - step
-    yield start
-    start = inc(start)
-    while cmp(start, stop):
-        yield start
-        start = inc(start)
 
 
 def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
@@ -102,6 +87,7 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                     [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]])
 
 # TODO start/end time, duration, Initial/Final State of Charge
+# TODO preprocess incremental changes and move to Preprocess.py
 
 with DB.connect() as mconnection:
     with mconnection.cursor(DictCursor) as mcursor:

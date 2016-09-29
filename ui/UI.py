@@ -1,5 +1,7 @@
 import gi
 
+from util.Utils import discharge_curr_to_ampere, smooth
+
 gi.require_version('Gtk', '3.0')
 
 import logging
@@ -23,49 +25,6 @@ __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(threadName)-10.10s %(levelname)-3.3s"
                                                 " %(name)-12.12s - %(message)s")
-
-
-def set_processing(processing):
-    builder.get_object('prevButton').set_sensitive(not processing)
-    builder.get_object('redrawButton').set_visible(not processing)
-    builder.get_object('nextButton').set_sensitive(not processing)
-    builder.get_object('redrawSpinner').set_visible(processing)
-
-
-def discharge_curr_to_ampere(val):
-    """Convert DischargeCurr from the DB from the raw sensor value to amperes"""
-    return (val - 504) * 0.033 if val else 0
-
-
-def smooth(samples, label, label_smooth=None, alpha=.95, default_value=None):
-    """Smooth values using the formula
-    `samples[n][label_smooth] = alpha * samples[n-1][label_smooth] + (1 - alpha) * samples[n][label]`
-    If a value isn't available, the previous smoothed value is used.
-    If none of these exist, default_value is used
-    :param samples: a list of dicts
-    :param label:
-    :param label_smooth:
-    :param alpha:
-    :param default_value:
-    :return:
-    """
-    if not label_smooth:
-        label_smooth = label + '_smooth'
-
-    last_sample = None
-    for sample in samples:
-        if not (sample and label in sample and sample[label]):
-            sample[label_smooth] = default_value
-        else:
-            if not (last_sample and label_smooth in last_sample and
-                        last_sample[label_smooth]):
-                # 1nd sensible value in the list, use it as starting point for the smoothing
-                sample[label_smooth] = sample[label]
-            else:
-                # current and previous value available, apply the smoothing function
-                sample[label_smooth] = alpha * last_sample[label_smooth] \
-                                       + (1 - alpha) * sample[label]
-        last_sample = sample
 
 
 def draw_figure():
@@ -161,6 +120,13 @@ def display_figure(imei, begin, end):
     fig.canvas.draw()
     set_processing(False)
     logger.debug("leave display_figure")
+
+
+def set_processing(processing):
+    builder.get_object('prevButton').set_sensitive(not processing)
+    builder.get_object('redrawButton').set_visible(not processing)
+    builder.get_object('nextButton').set_sensitive(not processing)
+    builder.get_object('redrawSpinner').set_visible(processing)
 
 
 class Signals:
