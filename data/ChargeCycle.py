@@ -110,5 +110,4 @@ with DB.connect() as mconnection:
                       charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
     preprocess_cycles(mconnection, charge_attr='DischargeCurr',
                       charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
-    # mconnection.commit()
-    # plot_cycles_timeline(mconnection)
+    mconnection.commit()
