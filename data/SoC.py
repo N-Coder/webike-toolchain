@@ -43,7 +43,7 @@ d['45']['Xs'] = [10 * i for i in
                   760, 800, 840, 880, 920, 960, 1000, 1040, 1080, 1120, 1160, 1200, 1240, 1280, 1320, 1360,
                   1400, 1440, 1480, 1520, 1560, 1600, 1640, 1680, 1720, 1760, 1800, 1840, 1880, 1920, 1960, 2000]]
 
-# battery OEM graphs show that max voltage should be 32, but we have tos tep down the voltage to 8 or so.
+# battery OEM graphs show that max voltage should be 32, but we have to step down the voltage to 8 or so.
 offset = 22 / 32
 
 # value 4 (0 indexed) should be close to value 5 for the transition from 1 to 2 to be smooth.
@@ -87,11 +87,20 @@ d['45']['Ys'] = [10 * offset * (i + .2) for i in
                   3.2600000000000002, 3.245, 3.2300000000000004, 3.2150000000000003, 3.2, 3.06, 2.9, 2.7800000000000002,
                   2.64, 2.5]]
 
-d['-20']['maxwh'] = d['-20']['Xs'][-1] * max(d['-20']['Ys']) / 1000
-d['-10']['maxwh'] = d['-10']['Xs'][-1] * max(d['-10']['Ys']) / 1000
-d['0']['maxwh'] = d['0']['Xs'][-1] * max(d['0']['Ys']) / 1000
-d['23']['maxwh'] = d['23']['Xs'][-1] * max(d['23']['Ys']) / 1000
-d['45']['maxwh'] = d['45']['Xs'][-1] * max(d['45']['Ys']) / 1000
+for temp, vals in d.items():
+    vals['maxwh_box'] = vals['Xs'][-1] * max(vals['Ys']) / 1000
+    vals['maxwh_riemann'] = vals['Xs'][-1] * (sum(vals['Ys']) / len(vals['Ys'])) / 1000
+
+
+def integrate_box(data, i):
+    val = data['Xs'][i] * data['Ys'][i]
+    return (data['maxwh_box'] - val / 1000) / data['maxwh_box']
+
+
+def integrate_riemann(data, i):
+    if i < 1: return 0
+    val = (data['Xs'][i] - data['Xs'][i - 1]) * data['Ys'][i]
+    return (data['maxwh_riemann'] - val / 1000) / data['maxwh_riemann']
 
 
 def clip(inpt):
@@ -136,30 +145,25 @@ def model_func2_3Line(x, m1, b1, m2, b2, m3, b3, m):
 """
 linear model. ignore first 5 and last 6, corresponding to modes 1 and 3, when training linear model
 """
-linearN20, parm_cov = sp.optimize.curve_fit(
+linearN20, _ = sp.optimize.curve_fit(
     model_funcLinear, d['-20']['Ys'][5:47],
-    [(d['-20']['maxwh'] - d['-20']['Xs'][i] * d['-20']['Ys'][i] / 1000) / d['-20']['maxwh']
-     for i in range(5, 47)])
-linearN10, parm_cov = sp.optimize.curve_fit(
+    [integrate_box(d['-20'], i) for i in range(5, 47)])
+linearN10, _ = sp.optimize.curve_fit(
     model_funcLinear, d['-10']['Ys'][5:47],
-    [(d['-10']['maxwh'] - d['-10']['Xs'][i] * d['-10']['Ys'][i] / 1000) / d['-10']['maxwh']
-     for i in range(5, 47)])
+    [integrate_box(d['-10'], i) for i in range(5, 47)])
 
 """
 three line model
 """
-threeLine0, parm_cov = sp.optimize.curve_fit(
+threeLine0, _ = sp.optimize.curve_fit(
     model_func3Line, d['0']['Ys'],
-    [(d['0']['maxwh'] - d['0']['Xs'][i] * d['0']['Ys'][i] / 1000) / d['0']['maxwh']
-     for i in range(0, len(d['0']['Xs']))])
-threeLineP23, parm_cov = sp.optimize.curve_fit(
+    [integrate_box(d['0'], i) for i in range(0, len(d['0']['Xs']))])
+threeLineP23, _ = sp.optimize.curve_fit(
     model_func3Line, d['23']['Ys'],
-    [(d['23']['maxwh'] - d['23']['Xs'][i] * d['23']['Ys'][i] / 1000) / d['23']['maxwh']
-     for i in range(0, len(d['23']['Xs']))])
-threeLineP45, parm_cov = sp.optimize.curve_fit(
+    [integrate_box(d['23'], i) for i in range(0, len(d['23']['Xs']))])
+threeLineP45, _ = sp.optimize.curve_fit(
     model_func3Line, d['45']['Ys'],
-    [(d['45']['maxwh'] - d['45']['Xs'][i] * d['45']['Ys'][i] / 1000) / d['45']['maxwh']
-     for i in range(0, len(d['45']['Xs']))])
+    [integrate_box(d['45'], i) for i in range(0, len(d['45']['Xs']))])
 
 
 ########################################################################################################################
@@ -196,7 +200,7 @@ def calc_soc(temp, volt):
         elif volt >= y[46]:
             return clip(model_func2_3Line(volt, m1, b1, m2, b2, m3, b3, 2))
         else:
-            # Mode 3 is actually invalid. While in mode 3, the voltage drops so rapidly, buy the capacity in MaH
+            # Mode 3 is actually invalid. While in mode 3, the voltage drops so rapidly, but the capacity in MaH
             # doesn't, so the equation giving the capacity in wh, which multiplies the two, actually starts INCREASING.
             # To solve this, we will just linearly interpolate to 0 from the starting point of mode 3.
             return clip(model_func2_3Line(y[46], m1, b1, m2, b2, m3, b3, 2))
