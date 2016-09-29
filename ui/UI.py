@@ -1,8 +1,11 @@
+import gi
+
+gi.require_version('Gtk', '3.0')
+
 import logging
 import threading
 from datetime import timedelta, datetime
 
-import gi
 import matplotlib.dates as mdates
 import matplotlib.patches as mpatches
 import numpy as np
@@ -18,9 +21,8 @@ from util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
-
-gi.require_version('Gtk', '3.0')
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(threadName)-10.10s %(levelname)-3.3s"
+                                                " %(name)-12.12s - %(message)s")
 
 
 def set_processing(processing):
@@ -28,44 +30,6 @@ def set_processing(processing):
     builder.get_object('redrawButton').set_visible(not processing)
     builder.get_object('nextButton').set_sensitive(not processing)
     builder.get_object('redrawSpinner').set_visible(processing)
-
-
-def draw_figure():
-    year = int(builder.get_object('yearButton').get_text())
-    month = int(builder.get_object('monthButton').get_text())
-    imei = builder.get_object('imeiCombo').get_active_text()
-    min = datetime(year=year, month=month, day=1)
-    max = min + relativedelta(months=1) - timedelta(seconds=1)
-
-    set_processing(True)
-
-    logger.info(__("Plotting {} -- {}-{} from {} to {}", imei, year, month, min, max))
-    thread = threading.Thread(target=get_data_async, args=(imei, min, max))
-    thread.daemon = True
-    thread.start()
-    # get_data_async(imei, min, max)
-
-
-def get_data_async(imei, min, max):
-    cursor.execute(
-        """SELECT Stamp, ChargingCurr, DischargeCurr, soc_smooth FROM imei{imei}
-        JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-        WHERE Stamp >= '{min}' AND Stamp <= '{max}'
-        ORDER BY Stamp ASC"""
-            .format(imei=imei, min=min, max=max))
-    charge_values = cursor.fetchall()
-
-    smooth(charge_values, 'ChargingCurr')
-    smooth(charge_values, 'DischargeCurr')
-
-    cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
-    charge_cycles = cursor.fetchall()
-
-    cursor.execute("SELECT * FROM trip{} ORDER BY start_time ASC".format(imei))
-    trips = cursor.fetchall()
-
-    GLib.idle_add(draw_figure_async, imei, min, max, charge_values, charge_cycles, trips)
-    # draw_figure_async(imei, min, max, charge_values, charge_cycles, trips)
 
 
 def discharge_curr_to_ampere(val):
@@ -104,11 +68,53 @@ def smooth(samples, label, label_smooth=None, alpha=.95, default_value=None):
         last_sample = sample
 
 
-def draw_figure_async(imei, min, max, charge_values, charge_cycles, trips):
-    logger.info(__("Started rendering {} -- {}-{} from {} to {}", imei, min.year, min.month, min, max))
+def draw_figure():
+    logger.debug("enter draw_figure")
+    year = int(builder.get_object('yearButton').get_text())
+    month = int(builder.get_object('monthButton').get_text())
+    imei = builder.get_object('imeiCombo').get_active_text()
+    begin = datetime(year=year, month=month, day=1)
+    end = begin + relativedelta(months=1) - timedelta(seconds=1)
 
-    ax.clear()
-    ax.set_xlim(min, max)
+    set_processing(True)
+
+    logger.info(__("Plotting {} -- {}-{} from {} to {}", imei, year, month, begin, end))
+    thread = threading.Thread(target=get_data_async, args=(imei, begin, end))
+    thread.daemon = True
+    thread.start()
+    # get_data_async(imei, begin, end)
+
+
+def get_data_async(imei, begin, end):
+    logger.debug("enter get_data_async")
+    cursor.execute(
+        """SELECT Stamp, ChargingCurr, DischargeCurr, soc_smooth FROM imei{imei}
+        JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
+        WHERE Stamp >= '{min}' AND Stamp <= '{max}'
+        ORDER BY Stamp ASC"""
+            .format(imei=imei, min=begin, max=end))
+    charge_values = cursor.fetchall()
+
+    smooth(charge_values, 'ChargingCurr')
+    smooth(charge_values, 'DischargeCurr')
+
+    cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
+    charge_cycles = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM trip{} ORDER BY start_time ASC".format(imei))
+    trips = cursor.fetchall()
+
+    logger.debug("leave get_data_async")
+    # GLib.idle_add(draw_figure_async, imei, min, max, charge_values, charge_cycles, trips)
+    draw_figure_async(imei, begin, end, charge_values, charge_cycles, trips)
+
+
+def draw_figure_async(imei, begin, end, charge_values, charge_cycles, trips):
+    logger.debug("enter draw_figure_async")
+
+    fig.clear()
+    ax = fig.add_subplot(111)
+
     ax.plot(
         list([x['Stamp'] for x in charge_values]),
         list([x['soc_smooth'] or np.nan for x in charge_values]),
@@ -138,16 +144,23 @@ def draw_figure_async(imei, min, max, charge_values, charge_cycles, trips):
     handles.append(mpatches.Patch(color='m', label='Charging Cycles [DischargeCurr]'))
     ax.legend(handles=handles, loc='upper right')
 
-    ax.set_title("{} -- {}-{}".format(imei, min.year, min.month))
-    ax.set_xlim(min, max)
+    ax.set_title("{} -- {}-{}".format(imei, begin.year, begin.month))
+    ax.set_xlim(begin, end)
     ax.set_ylim(-3, 5)
     ax.xaxis.set_major_locator(mdates.DayLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%d'))
     fig.tight_layout()
-    fig.canvas.draw()
 
+    logger.debug("leave draw_figure_async")
+    GLib.idle_add(display_figure, imei, end, begin)
+    # display_figure(imei, max, min)
+
+
+def display_figure(imei, begin, end):
+    logger.info(__("Finished plotting {} -- {}-{} from {} to {}", imei, end.year, end.month, end, begin))
+    fig.canvas.draw()
     set_processing(False)
-    logger.info(__("Finished plotting {} -- {}-{} from {} to {}", imei, min.year, min.month, min, max))
+    logger.debug("leave display_figure")
 
 
 class Signals:
@@ -178,7 +191,6 @@ with DB.connect() as connection:
         set_processing(True)
 
         fig = Figure()
-        ax = fig.add_subplot(111)
 
         canvas = FigureCanvas(fig)
         builder.get_object('plotContainer').add(canvas)
