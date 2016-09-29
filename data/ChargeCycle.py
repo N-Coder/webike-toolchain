@@ -1,11 +1,6 @@
 import logging
 from datetime import timedelta, datetime
 
-import matplotlib.dates as mdates
-import matplotlib.patches as mpatches
-import matplotlib.pyplot as plt
-from dateutil.relativedelta import relativedelta
-
 from util import DB
 from util.Constants import IMEIS
 from util.DB import DictCursor
@@ -105,78 +100,6 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                     (imei, start_time, end_time, sample_count, avg_thresh_val, type)
                     VALUES (%s, %s, %s, %s, %s, %s);""",
                     [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]])
-
-
-def plot_cycles_timeline(connection):
-    with connection.cursor(DictCursor) as cursor:
-        for nr, imei in enumerate(IMEIS):
-            logger.info(__("Plotting charging cycles for {}", imei))
-            cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
-            charge_cycles = cursor.fetchall()
-
-            cursor.execute("SELECT * FROM trip{} ORDER BY start_time ASC".format(imei))
-            trips = cursor.fetchall()
-
-            cursor.execute("SELECT MIN(Stamp) as min, MAX(Stamp) as max FROM imei{}".format(imei))
-            limits = cursor.fetchone()
-            if not limits['min']:
-                # FIXME weird MySQL error, non-null column Stamp is null for some tables
-                limits['min'] = datetime(year=2014, month=1, day=1)
-
-            for month in daterange(limits['min'].date(), limits['max'].date() + timedelta(days=1),
-                                   relativedelta(months=1)):
-                min = month
-                max = month + relativedelta(months=1) - timedelta(seconds=1)
-                logger.info(__("Plotting {} -- {}-{} from {} to {}", imei, month.year, month.month, min, max))
-
-                cursor.execute(
-                    """SELECT Stamp, ChargingCurr, DischargeCurr, soc_smooth FROM imei{imei}
-                    JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-                    WHERE Stamp >= '{min}' AND Stamp <= '{max}'
-                    ORDER BY Stamp ASC"""
-                        .format(imei=imei, min=min, max=max))
-                charge_values = cursor.fetchall()
-
-                if len(charge_values) < 100:
-                    logger.debug(__("Skipping sparse month with only {} rows", len(charge_values)))
-                    continue
-
-                logger.debug(__("Generating graph from {} rows", len(charge_values)))
-                plt.clf()
-                plt.xlim(min, max)
-
-                plt.plot(
-                    list([x['Stamp'] for x in charge_values]),
-                    list([x['soc_smooth'] or -2 for x in charge_values]),
-                    'b-', label="State of Charge", alpha=0.9
-                )
-                plt.plot(
-                    list([x['Stamp'] for x in charge_values]),
-                    list([x['ChargingCurr'] / 200 if x['ChargingCurr'] else -2 for x in charge_values]),
-                    'r-', label="Charging Current", alpha=0.9
-                )
-
-                for trip in trips:
-                    plt.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
-                for cycle in charge_cycles:
-                    plt.axvspan(cycle['start_time'], cycle['end_time'], color='m', alpha=0.5, lw=0)
-
-                handles = list(plt.gca().get_legend_handles_labels()[0])
-                handles.append(mpatches.Patch(color='y', label='Trips'))
-                handles.append(mpatches.Patch(color='m', label='Charging Cycles (Current based)'))
-                plt.legend(handles=handles, loc='best')
-
-                file = "../out/cc/{}-{}-{}.png".format(imei, month.year, month.month)
-                logger.debug(__("Writing graph to {}", file))
-                plt.title("{} -- {}-{}".format(imei, month.year, month.month))
-                plt.xlim(min, max)
-                plt.ylim(-3, 5)
-                plt.gcf().set_size_inches(24, 10)
-                plt.tight_layout()
-                plt.gca().xaxis.set_major_locator(mdates.DayLocator())
-                plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%d'))
-                plt.savefig(file, dpi=300, bbox_inches='tight')
-
 
 # TODO start/end time, duration, Initial/Final State of Charge
 
