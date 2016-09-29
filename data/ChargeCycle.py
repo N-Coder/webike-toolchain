@@ -31,29 +31,29 @@ def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
         start = inc(start)
 
 
-def extract_cycles_curr(charge_samples,
-                        charge_thresh_start=50, charge_thresh_end=50, min_charge_samples=100,
-                        max_sample_delay=timedelta(minutes=10), min_charge_time=timedelta(minutes=10)):
+def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
+                        min_charge_samples=100, max_sample_delay=timedelta(minutes=10),
+                        min_charge_time=timedelta(minutes=10)):
     """Detect charging cycles based on the ChargingCurr."""
     cycles = []
     discarded_cycles = []
     charge_start = charge_end = None
     charge_sample_count = 0
-    charge_avg_curr = 0
+    charge_avg = 0
 
     last_sample = None
     for sample in charge_samples:
         # did charging start?
         if not charge_start:
-            if sample['ChargingCurr'] > charge_thresh_start:
+            if charge_thresh_start(sample[charge_attr]):
                 # yes, because ChargingCurr is high
                 charge_start = sample
                 charge_sample_count = 1
-                charge_avg_curr = sample['ChargingCurr']
+                charge_avg = sample[charge_attr]
 
         # did charging stop?
         else:
-            if sample['ChargingCurr'] < charge_thresh_end:
+            if charge_thresh_end(sample[charge_attr]):
                 # yes, because ChargingCurr is back to normal
                 charge_end = last_sample
             elif sample['Stamp'] - last_sample['Stamp'] > max_sample_delay:
@@ -62,10 +62,10 @@ def extract_cycles_curr(charge_samples,
             else:
                 # nope, continue counting
                 charge_sample_count += 1
-                charge_avg_curr = (charge_avg_curr + sample['ChargingCurr']) / 2
+                charge_avg = (charge_avg + sample[charge_attr]) / 2
 
             if charge_end:
-                cycle = (charge_start, charge_end, charge_sample_count, charge_avg_curr)
+                cycle = (charge_start, charge_end, charge_sample_count, charge_avg)
                 # only count as charging cycle if it lasts for more than a few mins, we got enough samples
                 # and we actually increased the SoC
                 if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time \
@@ -76,33 +76,35 @@ def extract_cycles_curr(charge_samples,
                 charge_start = None
                 charge_end = None
                 charge_sample_count = 0
-                charge_avg_curr = 0
+                charge_avg = 0
         last_sample = sample
     return cycles, discarded_cycles
 
 
-def preprocess_cycles(connection):
+def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end):
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
             cursor.execute(
                 """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
                 JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-                WHERE ChargingCurr IS NOT NULL AND ChargingCurr != 0
+                WHERE {attr} IS NOT NULL AND {attr} != 0
                 ORDER BY Stamp ASC"""
-                    .format(imei=imei))
+                    .format(imei=imei, attr=charge_attr))
             charge = cursor.fetchall()
 
-            logger.info("Detecting charging cycles based on current")
-            cycles_curr, cycles_curr_disc = extract_cycles_curr(charge)
+            logger.info(__("Detecting charging cycles based on {}", charge_attr))
+            cycles_curr, cycles_curr_disc = \
+                extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end)
 
-            logger.info(__("Writing {} detected cycles to DB", len(cycles_curr)))
+            logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",
+                           len(cycles_curr), charge_attr[0], len(cycles_curr_disc)))
             for cycle in cycles_curr:
                 cursor.execute(
                     """INSERT INTO webike_sfink.charge_cycles
                     (imei, start_time, end_time, sample_count, avg_thresh_val, type)
                     VALUES (%s, %s, %s, %s, %s, %s);""",
-                    [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], 'A'])
+                    [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]])
 
 
 def plot_cycles_timeline(connection):
@@ -179,6 +181,11 @@ def plot_cycles_timeline(connection):
 # TODO start/end time, duration, Initial/Final State of Charge
 
 with DB.connect() as mconnection:
-    preprocess_cycles(mconnection)
-    mconnection.commit()
-    plot_cycles_timeline(mconnection)
+    with mconnection.cursor(DictCursor) as mcursor:
+        mcursor.execute("TRUNCATE TABLE webike_sfink.charge_cycles;")
+    preprocess_cycles(mconnection, charge_attr='ChargingCurr',
+                      charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
+    preprocess_cycles(mconnection, charge_attr='DischargeCurr',
+                      charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
+    # mconnection.commit()
+    # plot_cycles_timeline(mconnection)
