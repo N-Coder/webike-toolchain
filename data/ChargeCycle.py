@@ -5,6 +5,7 @@ from util import DB
 from util.Constants import IMEIS
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
+from util.Utils import smooth
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
     return cycles, discarded_cycles
 
 
-def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end):
+def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, smooth_func=None):
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
@@ -72,6 +73,9 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                 ORDER BY Stamp ASC"""
                     .format(imei=imei, attr=charge_attr))
             charge = cursor.fetchall()
+
+            if callable(smooth_func):
+                smooth_func(charge, charge_attr)
 
             logger.info(__("Detecting charging cycles based on {}", charge_attr))
             cycles_curr, cycles_curr_disc = \
@@ -86,14 +90,20 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                     VALUES (%s, %s, %s, %s, %s, %s);""",
                     [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]])
 
+
 # TODO start/end time, duration, Initial/Final State of Charge
 # TODO preprocess incremental changes and move to Preprocess.py
 
+def smooth_func(samples, charge_attr):
+    smooth(samples, charge_attr, is_valid=lambda sample, last_sample, label: \
+        last_sample['Stamp'] - sample['Stamp'] < timedelta(minutes=5))
+
+
 with DB.connect() as mconnection:
     with mconnection.cursor(DictCursor) as mcursor:
-        mcursor.execute("TRUNCATE TABLE webike_sfink.charge_cycles;")
-    preprocess_cycles(mconnection, charge_attr='ChargingCurr',
-                      charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
-    preprocess_cycles(mconnection, charge_attr='DischargeCurr',
+        mcursor.execute("DELETE FROM webike_sfink.charge_cycles WHERE type='D';")
+    # preprocess_cycles(mconnection, charge_attr='ChargingCurr',
+    #                  charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
+    preprocess_cycles(mconnection, charge_attr='DischargeCurr', smooth_func=smooth_func,
                       charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
     mconnection.commit()
