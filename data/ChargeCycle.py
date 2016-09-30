@@ -96,7 +96,7 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
 
 def smooth_func(samples, charge_attr):
     smooth(samples, charge_attr, is_valid=lambda sample, last_sample, label: \
-        last_sample['Stamp'] - sample['Stamp'] < timedelta(minutes=5))
+        last_sample and last_sample['Stamp'] - sample['Stamp'] < timedelta(minutes=5))
 
 
 with DB.connect() as mconnection:
