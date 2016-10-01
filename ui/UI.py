@@ -1,7 +1,5 @@
 import gi
 
-from util.Utils import discharge_curr_to_ampere, smooth
-
 gi.require_version('Gtk', '3.0')
 
 import logging
@@ -13,13 +11,14 @@ import matplotlib.patches as mpatches
 import numpy as np
 from dateutil.relativedelta import relativedelta
 from gi.repository import Gtk, GLib, GObject
-from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
 from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
 from matplotlib.figure import Figure
 
+from ui.Toolbar import PlotToolbar
 from util import DB
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
+from util.Utils import discharge_curr_to_ampere, smooth
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -57,10 +56,17 @@ def get_data_async(imei, begin, end):
     smooth(charge_values, 'ChargingCurr')
     smooth(charge_values, 'DischargeCurr')
 
-    cursor.execute("SELECT * FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time".format(imei))
+    cursor.execute(
+        "SELECT * FROM webike_sfink.charge_cycles "
+        "WHERE imei='{imei}' AND end_time >= '{min}' AND start_time <= '{max}' "
+        "ORDER BY start_time".format(imei=imei, min=begin, max=end))
     charge_cycles = cursor.fetchall()
 
-    cursor.execute("SELECT * FROM trip{} ORDER BY start_time ASC".format(imei))
+    cursor.execute(
+        "SELECT * FROM trip{imei} "
+        "WHERE end_time >= '{min}' AND start_time <= '{max}' "
+        "ORDER BY start_time ASC"
+            .format(imei=imei, min=begin, max=end))
     trips = cursor.fetchall()
 
     logger.debug("leave get_data_async")
@@ -71,6 +77,7 @@ def get_data_async(imei, begin, end):
 def draw_figure_async(imei, begin, end, charge_values, charge_cycles, trips):
     logger.debug("enter draw_figure_async")
 
+    legend_visible = not fig.add_subplot(111).legend_ or fig.add_subplot(111).legend_.get_visible()
     fig.clear()
     ax = fig.add_subplot(111)
 
@@ -101,7 +108,8 @@ def draw_figure_async(imei, begin, end, charge_values, charge_cycles, trips):
     handles.append(mpatches.Patch(color='y', label='Trips'))
     handles.append(mpatches.Patch(color='c', label='Charging Cycles [ChargingCurr]'))
     handles.append(mpatches.Patch(color='m', label='Charging Cycles [DischargeCurr]'))
-    ax.legend(handles=handles, loc='upper right')
+    legend = ax.legend(handles=handles, loc='upper right')
+    legend.set_visible(legend_visible)
 
     ax.set_title("{} -- {}-{}".format(imei, begin.year, begin.month))
     ax.set_xlim(begin, end)
@@ -123,10 +131,11 @@ def display_figure(imei, begin, end):
 
 
 def set_processing(processing):
-    builder.get_object('prevButton').set_sensitive(not processing)
-    builder.get_object('redrawButton').set_visible(not processing)
-    builder.get_object('nextButton').set_sensitive(not processing)
     builder.get_object('redrawSpinner').set_visible(processing)
+    builder.get_object('redrawButton').set_visible(not processing)
+
+    builder.get_object('topbarContainer').set_sensitive(not processing)
+    builder.get_object('toolbarContainer').set_sensitive(not processing)
 
 
 class Signals:
@@ -144,6 +153,13 @@ class Signals:
         builder.get_object('monthButton').spin(Gtk.SpinType.STEP_FORWARD, 1)
         draw_figure()
 
+    def do_wrap_month(self, widget):
+        month = int(widget.get_text())
+        if month == 1:
+            builder.get_object('yearButton').spin(Gtk.SpinType.STEP_FORWARD, 1)
+        else:
+            builder.get_object('yearButton').spin(Gtk.SpinType.STEP_BACKWARD, 1)
+
 
 with DB.connect() as connection:
     with connection.cursor(DictCursor) as cursor:
@@ -152,19 +168,18 @@ with DB.connect() as connection:
         builder = Gtk.Builder()
         builder.add_from_file('glade/timeline.glade')
         builder.connect_signals(Signals())
-
         window = builder.get_object('window')
-        set_processing(True)
 
         fig = Figure()
 
         canvas = FigureCanvas(fig)
         builder.get_object('plotContainer').add(canvas)
 
-        toolbar = NavigationToolbar(canvas, window)
+        toolbar = PlotToolbar(canvas, window)
         builder.get_object('toolbarContainer').add(toolbar)
 
-        draw_figure()
-
         window.show_all()
+        set_processing(False)
+
+        draw_figure()
         Gtk.main()

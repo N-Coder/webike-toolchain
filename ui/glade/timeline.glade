@@ -1,284 +1,287 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.20.0 -->
 <interface>
-    <requires lib="gtk+" version="3.20"/>
-    <object class="GtkAdjustment" id="adjustmentMonth">
-        <property name="lower">1</property>
-        <property name="upper">12</property>
-        <property name="value">1</property>
-        <property name="step_increment">1</property>
-        <property name="page_increment">10</property>
-    </object>
-    <object class="GtkAdjustment" id="adjustmentYear">
-        <property name="lower">2013</property>
-        <property name="upper">2030</property>
-        <property name="value">2016</property>
-        <property name="step_increment">1</property>
-        <property name="page_increment">10</property>
-    </object>
-    <object class="GtkWindow" id="window">
+  <requires lib="gtk+" version="3.20"/>
+  <object class="GtkAdjustment" id="adjustmentMonth">
+    <property name="lower">1</property>
+    <property name="upper">12</property>
+    <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adjustmentYear">
+    <property name="lower">2013</property>
+    <property name="upper">2030</property>
+    <property name="value">2016</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkWindow" id="window">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">WeBike Timeline</property>
+    <property name="default_width">400</property>
+    <property name="default_height">400</property>
+    <signal name="destroy" handler="on_window_destroy" swapped="no"/>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="title" translatable="yes">WeBike Timeline</property>
-        <property name="default_width">400</property>
-        <property name="default_height">400</property>
-        <signal name="destroy" handler="on_window_destroy" swapped="no"/>
+        <property name="orientation">vertical</property>
         <child>
-            <object class="GtkBox">
+          <object class="GtkBox" id="topbarContainer">
+            <property name="visible">True</property>
+            <property name="sensitive">False</property>
+            <property name="can_focus">False</property>
+            <property name="margin_left">6</property>
+            <property name="margin_right">6</property>
+            <property name="spacing">4</property>
+            <child>
+              <object class="GtkBox">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
+                <property name="homogeneous">True</property>
                 <child>
-                    <object class="GtkScrolledWindow" id="plotContainer">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="shadow_type">in</property>
-                        <child>
-                            <placeholder/>
-                        </child>
-                    </object>
-                    <packing>
-                        <property name="expand">True</property>
-                        <property name="fill">True</property>
-                        <property name="position">0</property>
-                    </packing>
+                  <object class="GtkButton" id="nextButton">
+                    <property name="label">gtk-media-previous</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="use_stock">True</property>
+                    <property name="always_show_image">True</property>
+                    <signal name="clicked" handler="do_previous" swapped="no"/>
+                    <accelerator key="Page_Down" signal="clicked"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
                 </child>
                 <child>
-                    <object class="GtkScrolledWindow" id="toolbarContainer">
-                        <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="hscrollbar_policy">never</property>
-                        <property name="vscrollbar_policy">never</property>
-                        <property name="shadow_type">in</property>
-                        <child>
-                            <placeholder/>
-                        </child>
-                    </object>
-                    <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
-                    </packing>
+                  <object class="GtkButton" id="redrawButton">
+                    <property name="label">gtk-apply</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="use_stock">True</property>
+                    <property name="always_show_image">True</property>
+                    <signal name="clicked" handler="on_redraw" swapped="no"/>
+                    <accelerator key="Return" signal="clicked"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
                 </child>
                 <child>
-                    <object class="GtkBox">
-                        <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="halign">end</property>
-                        <property name="margin_left">6</property>
-                        <property name="margin_right">6</property>
-                        <property name="spacing">4</property>
-                        <child>
-                            <object class="GtkLabel">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">IMEI</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">0</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkComboBoxText" id="imeiCombo">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="active">0</property>
-                                <items>
-                                    <item translatable="yes">0587</item>
-                                    <item translatable="yes">0603</item>
-                                    <item translatable="yes">0636</item>
-                                    <item translatable="yes">0657</item>
-                                    <item translatable="yes">0665</item>
-                                    <item translatable="yes">0669</item>
-                                    <item translatable="yes">1210</item>
-                                    <item translatable="yes">1473</item>
-                                    <item translatable="yes">2910</item>
-                                    <item translatable="yes">3014</item>
-                                    <item translatable="yes">3215</item>
-                                    <item translatable="yes">3410</item>
-                                    <item translatable="yes">3469</item>
-                                    <item translatable="yes">4381</item>
-                                    <item translatable="yes">5233</item>
-                                    <item translatable="yes">5432</item>
-                                    <item translatable="yes">6089</item>
-                                    <item translatable="yes">6097</item>
-                                    <item translatable="yes">6473</item>
-                                    <item translatable="yes">6904</item>
-                                    <item translatable="yes">6994</item>
-                                    <item translatable="yes">7303</item>
-                                    <item translatable="yes">7459</item>
-                                    <item translatable="yes">7517</item>
-                                    <item translatable="yes">7710</item>
-                                    <item translatable="yes">8508</item>
-                                    <item translatable="yes">8664</item>
-                                    <item translatable="yes">8870</item>
-                                    <item translatable="yes">9050</item>
-                                    <item translatable="yes">9399</item>
-                                    <item translatable="yes">9407</item>
-                                    <item translatable="yes">9519</item>
-                                </items>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">1</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkSeparator">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="padding">6</property>
-                                <property name="position">2</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkLabel">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">Year / Month</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">3</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkSpinButton" id="yearButton">
-                                <property name="name">yearspin</property>
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="tooltip_text" translatable="yes">Year</property>
-                                <property name="width_chars">4</property>
-                                <property name="max_width_chars">4</property>
-                                <property name="adjustment">adjustmentYear</property>
-                                <property name="snap_to_ticks">True</property>
-                                <property name="numeric">True</property>
-                                <property name="wrap">True</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">4</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkSpinButton" id="monthButton">
-                                <property name="visible">True</property>
-                                <property name="can_focus">True</property>
-                                <property name="width_chars">2</property>
-                                <property name="max_width_chars">2</property>
-                                <property name="adjustment">adjustmentMonth</property>
-                                <property name="snap_to_ticks">True</property>
-                                <property name="numeric">True</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">5</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkSeparator">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="padding">6</property>
-                                <property name="position">6</property>
-                            </packing>
-                        </child>
-                        <child>
-                            <object class="GtkBox">
-                                <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="spacing">4</property>
-                                <property name="homogeneous">True</property>
-                                <child>
-                                    <object class="GtkButton" id="nextButton">
-                                        <property name="label">gtk-media-previous</property>
-                                        <property name="sensitive">False</property>
-                                        <property name="can_focus">True</property>
-                                        <property name="receives_default">True</property>
-                                        <property name="no_show_all">True</property>
-                                        <property name="use_stock">True</property>
-                                        <property name="always_show_image">True</property>
-                                        <signal name="clicked" handler="do_next" swapped="no"/>
-                                    </object>
-                                    <packing>
-                                        <property name="expand">False</property>
-                                        <property name="fill">True</property>
-                                        <property name="position">0</property>
-                                    </packing>
-                                </child>
-                                <child>
-                                    <object class="GtkButton" id="redrawButton">
-                                        <property name="label">gtk-apply</property>
-                                        <property name="visible">True</property>
-                                        <property name="can_focus">True</property>
-                                        <property name="receives_default">True</property>
-                                        <property name="use_stock">True</property>
-                                        <property name="always_show_image">True</property>
-                                        <signal name="clicked" handler="on_redraw" swapped="no"/>
-                                    </object>
-                                    <packing>
-                                        <property name="expand">False</property>
-                                        <property name="fill">True</property>
-                                        <property name="position">1</property>
-                                    </packing>
-                                </child>
-                                <child>
-                                    <object class="GtkSpinner" id="redrawSpinner">
-                                        <property name="can_focus">False</property>
-                                        <property name="no_show_all">True</property>
-                                        <property name="active">True</property>
-                                    </object>
-                                    <packing>
-                                        <property name="expand">False</property>
-                                        <property name="fill">True</property>
-                                        <property name="position">2</property>
-                                    </packing>
-                                </child>
-                                <child>
-                                    <object class="GtkButton" id="prevButton">
-                                        <property name="label">gtk-media-next</property>
-                                        <property name="can_focus">True</property>
-                                        <property name="receives_default">True</property>
-                                        <property name="no_show_all">True</property>
-                                        <property name="use_stock">True</property>
-                                        <property name="always_show_image">True</property>
-                                        <signal name="clicked" handler="do_previous" swapped="no"/>
-                                    </object>
-                                    <packing>
-                                        <property name="expand">False</property>
-                                        <property name="fill">True</property>
-                                        <property name="position">3</property>
-                                    </packing>
-                                </child>
-                            </object>
-                            <packing>
-                                <property name="expand">False</property>
-                                <property name="fill">True</property>
-                                <property name="position">7</property>
-                            </packing>
-                        </child>
-                    </object>
-                    <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="padding">5</property>
-                        <property name="position">2</property>
-                    </packing>
+                  <object class="GtkSpinner" id="redrawSpinner">
+                    <property name="can_focus">False</property>
+                    <property name="no_show_all">True</property>
+                    <property name="active">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
                 </child>
-            </object>
+                <child>
+                  <object class="GtkButton" id="prevButton">
+                    <property name="label">gtk-media-next</property>
+                    <property name="visible">True</property>
+                    <property name="can_focus">True</property>
+                    <property name="receives_default">True</property>
+                    <property name="use_stock">True</property>
+                    <property name="always_show_image">True</property>
+                    <signal name="clicked" handler="do_next" swapped="no"/>
+                    <accelerator key="Page_Up" signal="clicked"/>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSeparator">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="padding">6</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">IMEI</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkComboBoxText" id="imeiCombo">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="active">0</property>
+                <items>
+                  <item translatable="yes">0587</item>
+                  <item translatable="yes">0603</item>
+                  <item translatable="yes">0636</item>
+                  <item translatable="yes">0657</item>
+                  <item translatable="yes">0665</item>
+                  <item translatable="yes">0669</item>
+                  <item translatable="yes">1210</item>
+                  <item translatable="yes">1473</item>
+                  <item translatable="yes">2910</item>
+                  <item translatable="yes">3014</item>
+                  <item translatable="yes">3215</item>
+                  <item translatable="yes">3410</item>
+                  <item translatable="yes">3469</item>
+                  <item translatable="yes">4381</item>
+                  <item translatable="yes">5233</item>
+                  <item translatable="yes">5432</item>
+                  <item translatable="yes">6089</item>
+                  <item translatable="yes">6097</item>
+                  <item translatable="yes">6473</item>
+                  <item translatable="yes">6904</item>
+                  <item translatable="yes">6994</item>
+                  <item translatable="yes">7303</item>
+                  <item translatable="yes">7459</item>
+                  <item translatable="yes">7517</item>
+                  <item translatable="yes">7710</item>
+                  <item translatable="yes">8508</item>
+                  <item translatable="yes">8664</item>
+                  <item translatable="yes">8870</item>
+                  <item translatable="yes">9050</item>
+                  <item translatable="yes">9399</item>
+                  <item translatable="yes">9407</item>
+                  <item translatable="yes">9519</item>
+                </items>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSeparator">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="padding">6</property>
+                <property name="position">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="label" translatable="yes">Year / Month</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">5</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="yearButton">
+                <property name="name">yearspin</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Year</property>
+                <property name="width_chars">4</property>
+                <property name="max_width_chars">4</property>
+                <property name="adjustment">adjustmentYear</property>
+                <property name="snap_to_ticks">True</property>
+                <property name="numeric">True</property>
+                <property name="wrap">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">6</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="monthButton">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="width_chars">2</property>
+                <property name="max_width_chars">2</property>
+                <property name="adjustment">adjustmentMonth</property>
+                <property name="snap_to_ticks">True</property>
+                <property name="numeric">True</property>
+                <property name="wrap">True</property>
+                <signal name="wrapped" handler="do_wrap_month" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">7</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="padding">5</property>
+            <property name="position">0</property>
+          </packing>
         </child>
-    </object>
+        <child>
+          <object class="GtkScrolledWindow" id="plotContainer">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="shadow_type">in</property>
+            <child>
+              <placeholder/>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScrolledWindow" id="toolbarContainer">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="hscrollbar_policy">never</property>
+            <property name="vscrollbar_policy">never</property>
+            <child>
+              <placeholder/>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
 </interface>
