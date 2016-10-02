@@ -8,6 +8,7 @@ from decimal import Decimal
 import wget
 from dateutil.relativedelta import relativedelta
 
+from util.Constants import STUDY_START
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
 
@@ -36,7 +37,7 @@ def download_data():
     if not os.path.exists(DOWNLOAD_DIR):
         logger.info("Created cache directory")
         os.makedirs(DOWNLOAD_DIR)
-    for year in range(2014, datetime.now().year + 1):
+    for year in range(STUDY_START.year, datetime.now().year + 1):
         for month in range(1, 12 + 1):
             file = "{}{}-{}.csv".format(DOWNLOAD_DIR, year, month)
             end_of_month = datetime(year=year, month=month, day=1) + relativedelta(months=1)
