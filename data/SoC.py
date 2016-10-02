@@ -87,10 +87,6 @@ d['45']['Ys'] = [10 * offset * (i + .2) for i in
                   3.2600000000000002, 3.245, 3.2300000000000004, 3.2150000000000003, 3.2, 3.06, 2.9, 2.7800000000000002,
                   2.64, 2.5]]
 
-for temp, vals in d.items():
-    vals['maxwh_box'] = vals['Xs'][-1] * max(vals['Ys']) / 1000
-    vals['maxwh_riemann'] = vals['Xs'][-1] * (sum(vals['Ys']) / len(vals['Ys'])) / 1000
-
 
 def integrate_box(data, i):
     val = data['Xs'][i] * data['Ys'][i]
@@ -98,9 +94,24 @@ def integrate_box(data, i):
 
 
 def integrate_riemann(data, i):
-    if i < 1: return 0
-    val = (data['Xs'][i] - data['Xs'][i - 1]) * data['Ys'][i]
-    return (data['maxwh_riemann'] - val / 1000) / data['maxwh_riemann']
+    i = min(len(vals['riemann_sum']) - 1, i)
+    return vals['riemann_sum'][i] / data['maxwh_riemann']
+
+
+for temp, vals in d.items():
+    vals['maxwh_box'] = vals['Xs'][-1] * max(vals['Ys']) / 1000
+
+    vals['riemann_val'] = []
+    for y, x1, x2 in zip(vals['Ys'], vals['Xs'], vals['Xs'][1:]):
+        vals['riemann_val'].append(y * (x2 - x1))
+
+    vals['riemann_sum'] = []
+    last_val = 0
+    for val in reversed(vals['riemann_val']):
+        last_val += val
+        vals['riemann_sum'].insert(0, last_val)
+
+    vals['maxwh_riemann'] = vals['riemann_sum'][0]
 
 
 def clip(inpt):
