@@ -2,7 +2,7 @@ import logging
 from datetime import timedelta
 
 from util import DB
-from util.Constants import IMEIS
+from util.Constants import IMEIS, STUDY_START
 from util.DB import DictCursor
 from util.Logging import BraceMessage as __
 from util.Utils import smooth
@@ -66,23 +66,41 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
+
+            # reprocess the last detected cycle, as it could have been cut of by data that wasn't uploaded yet
+            cursor.execute(
+                "SELECT start_time, end_time FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time DESC;"
+                    .format(imei))
+            start_time = STUDY_START
+            last_cycle = None
+            for cycle in cursor.fetchall_unbuffered():
+                # if the latest 2 cycles are close together, go back further just to be sure
+                if not last_cycle or cycle['end_time'] > start_time:
+                    start_time = cycle['start_time'] - timedelta(hours=1)
+                    last_cycle = cycle
+                else:
+                    break
+
             cursor.execute(
                 """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
                 JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-                WHERE {attr} IS NOT NULL AND {attr} != 0
+                WHERE {attr} IS NOT NULL AND {attr} != 0 AND Stamp >= '{start_time}'
                 ORDER BY Stamp ASC"""
-                    .format(imei=imei, attr=charge_attr))
+                    .format(imei=imei, attr=charge_attr, start_time=start_time))
             charge = cursor.fetchall()
 
             if callable(smooth_func):
                 smooth_func(charge, charge_attr)
 
-            logger.info(__("Detecting charging cycles based on {}", charge_attr))
+            logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
             cycles_curr, cycles_curr_disc = \
                 extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end)
 
             logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",
                            len(cycles_curr), charge_attr[0], len(cycles_curr_disc)))
+            cursor.execute(
+                "DELETE FROM webike_sfink.charge_cycles WHERE imei='{imei}' AND start_time >= '{start_time}';"
+                    .format(imei=imei, start_time=start_time))
             for cycle in cycles_curr:
                 cursor.execute(
                     """INSERT INTO webike_sfink.charge_cycles
@@ -92,7 +110,6 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
 
 
 # TODO start/end time, duration, Initial/Final State of Charge
-# TODO preprocess incremental changes and move to Preprocess.py
 
 def smooth_func(samples, charge_attr):
     smooth(samples, charge_attr, is_valid=lambda sample, last_sample, label: \
@@ -100,10 +117,10 @@ def smooth_func(samples, charge_attr):
 
 
 with DB.connect() as mconnection:
-    with mconnection.cursor(DictCursor) as mcursor:
-        mcursor.execute("DELETE FROM webike_sfink.charge_cycles WHERE type='D';")
-    # preprocess_cycles(mconnection, charge_attr='ChargingCurr',
-    #                  charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
+    # with mconnection.cursor(DictCursor) as mcursor:
+    #     mcursor.execute("DELETE FROM webike_sfink.charge_cycles;")
+    preprocess_cycles(mconnection, charge_attr='ChargingCurr',
+                      charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
     preprocess_cycles(mconnection, charge_attr='DischargeCurr', smooth_func=smooth_func,
                       charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
     mconnection.commit()
