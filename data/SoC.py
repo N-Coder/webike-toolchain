@@ -339,6 +339,6 @@ def preprocess_estimates(connection):
             )
             vals = cursor.fetchone()
             assert vals['count'] > 0
-            logger.info(__("Missing {} samples from {} to {}'", vals['count'], vals['min'], vals['max']))
+            logger.info(__("Missing {:,} samples from {} to {}", vals['count'], vals['min'], vals['max']))
             # Generate the estimate for all samples in the found timeframe
             generate_estimate(connection, imei, vals['min'], vals['max'])
