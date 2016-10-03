@@ -62,11 +62,11 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
 
 
 def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, smooth_func=None):
+    type = charge_attr[0]
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
 
-            # fixme won't work for different types
             # reprocess the last detected cycle, as it could have been cut of by data that wasn't uploaded yet
             start_time = STUDY_START
             last_cycle = None
@@ -74,9 +74,9 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                 scursor.execute(
                     "SELECT start_time, end_time "
                     "FROM webike_sfink.charge_cycles "
-                    "WHERE imei='{}' "
+                    "WHERE imei='{imei}' AND type='{type}' "
                     "ORDER BY start_time DESC;"
-                        .format(imei))
+                        .format(imei=imei, type=type))
                 for cycle in scursor.fetchall_unbuffered():
                     # if the latest 2 cycles are close together, go back further just to be sure
                     if not last_cycle or cycle['end_time'] > start_time:
@@ -104,15 +104,16 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
 
             # delete outdated cycles and write newly detected ones
             logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",
-                           len(cycles_curr), charge_attr[0], len(cycles_curr_disc)))
+                           len(cycles_curr), type, len(cycles_curr_disc)))
             cursor.execute(
-                "DELETE FROM webike_sfink.charge_cycles WHERE imei='{imei}' AND start_time >= '{start_time}';"
-                    .format(imei=imei, start_time=start_time))
+                "DELETE FROM webike_sfink.charge_cycles "
+                "WHERE imei='{imei}' AND start_time >= '{start_time}' AND type='{type}';"
+                    .format(imei=imei, start_time=start_time, type=type))
             cursor.executemany(
                 """INSERT INTO webike_sfink.charge_cycles
                 (imei, start_time, end_time, sample_count, avg_thresh_val, type)
                 VALUES (%s, %s, %s, %s, %s, %s);""",
-                [[imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]]
+                [[imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], type]
                  for cycle in cycles_curr]
             )
 
