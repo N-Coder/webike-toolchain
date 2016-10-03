@@ -1,10 +1,11 @@
+import itertools
 import logging
 import time
 
 from pymysql import connections
-from pymysql.constants import COMMAND
 
 from util.Logging import BraceMessage as __
+from util.Utils import progress
 
 logger = logging.getLogger(__name__)
 
@@ -18,24 +19,12 @@ class StopwatchConnection(connections.Connection):
     def query(self, sql, unbuffered=False):
         self._query_start = time.perf_counter()
         try:
-            res = connections.Connection.query(self, sql, unbuffered)
-            dur = time.perf_counter() - self._query_start
-            if not unbuffered and dur > 2:
-                logger.debug(__("Took {:.2f}s for executing query affecting {:,} rows",
-                                dur, res))
-            return res
+            return connections.Connection.query(self, sql, unbuffered)
         except:
             logger.error(__("Query failed after {:.2f}s:\n{}", time.perf_counter() - self._query_start, sql))
             raise
         finally:
             self._query_start = 0
-
-    def show_warnings(self):
-        """SHOW WARNINGS"""
-        self._execute_command(COMMAND.COM_QUERY, "SHOW WARNINGS")
-        result = self.result_class(self)
-        result.read()
-        return result.rows
 
     def _read_query_result(self, unbuffered=False):
         if unbuffered:
@@ -60,7 +49,7 @@ class StopwatchMySQLResult(connections.MySQLResult):
         self.unbuffered_active = True
         first_packet = self.connection._read_packet()
         if (time.perf_counter() - self.connection._query_start) > 2:
-            logger.debug("Server took {:.2f}s for processing request"
+            logger.debug("Server took {:.2f}s for processing request, rows will be loaded asynchronously"
                          .format(time.perf_counter() - self.connection._query_start))
 
         if first_packet.is_ok_packet():
@@ -84,7 +73,7 @@ class StopwatchMySQLResult(connections.MySQLResult):
         try:
             first_packet = self.connection._read_packet()
             if (time.perf_counter() - self.connection._query_start) > 2:
-                logger.debug("Server took {:.2f}s for processing request"
+                logger.debug("Server took {:.2f}s for processing request, loading rows now"
                              .format(time.perf_counter() - self.connection._query_start))
 
             if first_packet.is_ok_packet():
@@ -99,20 +88,16 @@ class StopwatchMySQLResult(connections.MySQLResult):
     def _read_rowdata_packet(self):
         """Read a rowdata packet for each data row in the result set."""
         rows = []
-        last_print = time.perf_counter()
-        last_rows = 0
-        while True:
+        for _ in progress(itertools.count(), logger=logger, level=logging.DEBUG,
+                          msg="Got {countf} rows after {timef}s ({ratef} rows per second)"):  # == while True
             packet = self.connection._read_packet()
             if self._check_packet_is_eof(packet):
-                self.connection = None  # release reference to kill cyclic reference.
                 break
             rows.append(self._read_row_from_packet(packet))
-            if (len(rows) % 2000) == 0 and (time.perf_counter() - last_print) > 5:
-                logger.debug("Got {:,} rows after {:.2f}s ({:,.2f} rows per second)"
-                             .format(len(rows), time.perf_counter() - self.connection._query_start,
-                                     (len(rows) - last_rows) / (time.perf_counter() - last_print)))
-                last_print = time.perf_counter()
-                last_rows = len(rows)
 
         self.affected_rows = len(rows)
         self.rows = tuple(rows)
+        dur = time.perf_counter() - self.connection._query_start
+        if dur > 2:
+            logger.debug(__("Took {:.2f}s for executing query affecting {:,} rows", dur, len(rows)))
+        self.connection = None  # release reference to kill cyclic reference.

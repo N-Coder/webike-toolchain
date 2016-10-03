@@ -1,11 +1,10 @@
 import logging
 from datetime import timedelta
 
-from util import DB
 from util.Constants import IMEIS, STUDY_START
-from util.DB import DictCursor
+from util.DB import DictCursor, StreamingDictCursor
 from util.Logging import BraceMessage as __
-from util.Utils import smooth
+from util.Utils import zip_prev, progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -22,8 +21,9 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
     charge_sample_count = 0
     charge_avg = 0
 
-    last_sample = None
-    for sample in charge_samples:
+    charge_samples = progress(charge_samples, logger=logger,
+                              msg="Processed {countf} samples after {timef}s ({ratef} samples per second)")
+    for last_sample, sample in zip_prev(charge_samples):
         # did charging start?
         if not charge_start:
             if charge_thresh_start(sample[charge_attr]):
@@ -58,7 +58,6 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
                 charge_end = None
                 charge_sample_count = 0
                 charge_avg = 0
-        last_sample = sample
     return cycles, discarded_cycles
 
 
@@ -67,60 +66,54 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
 
+            # fixme won't work for different types
             # reprocess the last detected cycle, as it could have been cut of by data that wasn't uploaded yet
-            cursor.execute(
-                "SELECT start_time, end_time FROM webike_sfink.charge_cycles WHERE imei='{}' ORDER BY start_time DESC;"
-                    .format(imei))
             start_time = STUDY_START
             last_cycle = None
-            for cycle in cursor.fetchall_unbuffered():
-                # if the latest 2 cycles are close together, go back further just to be sure
-                if not last_cycle or cycle['end_time'] > start_time:
-                    start_time = cycle['start_time'] - timedelta(hours=1)
-                    last_cycle = cycle
-                else:
-                    break
+            with connection.cursor(StreamingDictCursor) as scursor:
+                scursor.execute(
+                    "SELECT start_time, end_time "
+                    "FROM webike_sfink.charge_cycles "
+                    "WHERE imei='{}' "
+                    "ORDER BY start_time DESC;"
+                        .format(imei))
+                for cycle in scursor.fetchall_unbuffered():
+                    # if the latest 2 cycles are close together, go back further just to be sure
+                    if not last_cycle or cycle['end_time'] > start_time:
+                        start_time = cycle['start_time'] - timedelta(hours=1)
+                        last_cycle = cycle
+                    else:
+                        break
 
-            cursor.execute(
-                """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
-                JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
-                WHERE {attr} IS NOT NULL AND {attr} != 0 AND Stamp >= '{start_time}'
-                ORDER BY Stamp ASC"""
-                    .format(imei=imei, attr=charge_attr, start_time=start_time))
-            charge = cursor.fetchall()
+            # use another streaming cursor as the first one wasn't completely consumed
+            with connection.cursor(StreamingDictCursor) as scursor:
+                # fetch the charging sensor data and prepare the raw values
+                scursor.execute(
+                    """SELECT Stamp, ChargingCurr, DischargeCurr, BatteryVoltage, soc_smooth FROM imei{imei}
+                    JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
+                    WHERE {attr} IS NOT NULL AND {attr} != 0 AND Stamp >= '{start_time}'
+                    ORDER BY Stamp ASC"""
+                        .format(imei=imei, attr=charge_attr, start_time=start_time))
+                charge = scursor.fetchall_unbuffered()
+                if callable(smooth_func):
+                    charge = smooth_func(charge, charge_attr)
 
-            if callable(smooth_func):
-                smooth_func(charge, charge_attr)
+                logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
+                cycles_curr, cycles_curr_disc = \
+                    extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end)
 
-            logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
-            cycles_curr, cycles_curr_disc = \
-                extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end)
-
+            # delete outdated cycles and write newly detected ones
             logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",
                            len(cycles_curr), charge_attr[0], len(cycles_curr_disc)))
             cursor.execute(
                 "DELETE FROM webike_sfink.charge_cycles WHERE imei='{imei}' AND start_time >= '{start_time}';"
                     .format(imei=imei, start_time=start_time))
-            for cycle in cycles_curr:
-                cursor.execute(
-                    """INSERT INTO webike_sfink.charge_cycles
-                    (imei, start_time, end_time, sample_count, avg_thresh_val, type)
-                    VALUES (%s, %s, %s, %s, %s, %s);""",
-                    [imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]])
-
+            cursor.executemany(
+                """INSERT INTO webike_sfink.charge_cycles
+                (imei, start_time, end_time, sample_count, avg_thresh_val, type)
+                VALUES (%s, %s, %s, %s, %s, %s);""",
+                [[imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], charge_attr[0]]
+                 for cycle in cycles_curr]
+            )
 
 # TODO start/end time, duration, Initial/Final State of Charge
-
-def smooth_func(samples, charge_attr):
-    smooth(samples, charge_attr, is_valid=lambda sample, last_sample, label: \
-        last_sample and last_sample['Stamp'] - sample['Stamp'] < timedelta(minutes=5))
-
-
-with DB.connect() as mconnection:
-    # with mconnection.cursor(DictCursor) as mcursor:
-    #     mcursor.execute("DELETE FROM webike_sfink.charge_cycles;")
-    preprocess_cycles(mconnection, charge_attr='ChargingCurr',
-                      charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
-    preprocess_cycles(mconnection, charge_attr='DischargeCurr', smooth_func=smooth_func,
-                      charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
-    mconnection.commit()

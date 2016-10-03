@@ -1,11 +1,10 @@
 import logging
-import os
 import time
 import warnings
 from contextlib import contextmanager
 
 import pymysql
-from pymysql.cursors import Cursor, DictCursorMixin
+from pymysql.cursors import Cursor, DictCursor as _DictCursor, SSDictCursor as _SSDictCursor
 
 from util.DBStopwatch import StopwatchConnection as Connection
 from util.Logging import BraceMessage as __
@@ -42,8 +41,8 @@ class QualifiedDictCursor(QualifiedDictCursorMixin, Cursor):
     """A cursor which returns results as a dictionary with keys always consisting of the fully qualified column name"""
 
 
-class DictCursor(DictCursorMixin, Cursor):
-    """A cursor which returns results as a dictionary"""
+DictCursor = _DictCursor
+StreamingDictCursor = _SSDictCursor
 
 
 @contextmanager

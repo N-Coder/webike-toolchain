@@ -1,12 +1,12 @@
 import logging
-from datetime import datetime
 
 import scipy as sp
 from scipy.optimize import curve_fit
 
 from util.Constants import IMEIS
-from util.DB import DictCursor
+from util.DB import DictCursor, StreamingDictCursor
 from util.Logging import BraceMessage as __
+from util.Utils import zip_prev, smooth1, smooth_ignore_missing, progress
 
 __author__ = "Tommy Carpenter, Niko Fink"
 logger = logging.getLogger(__name__)
@@ -227,14 +227,14 @@ def generate_estimate(connection, imei, start, end):
     this is a new, simplified implementation of Tommy's grapher.getSOCEstimation
     see https://github.com/webike-dev/webike/blob/master/blizzard/grapher.py
     """
-    logger.info(__("Generating SoC estimation for {} from {} to {}", imei, start, end))
+    logger.info(__("Fetching raw SoC data for {} from {} to {}", imei, start, end))
     assert start is not None and end is not None
 
-    with connection.cursor(DictCursor) as cursor:
+    with connection.cursor(StreamingDictCursor) as scursor:
         # Select relevant data points
         # This selects one sample from soc before the actual date range,
         # so that the smoothed values are deterministic for further runs
-        count = cursor.execute(
+        scursor.execute(
             """(SELECT *
              FROM webike_sfink.soc_rie
              WHERE time < '{start}' AND imei = '{imei}'
@@ -255,46 +255,31 @@ def generate_estimate(connection, imei, start, end):
              WHERE Stamp >= '{start}' AND Stamp <= '{end}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0
              ORDER BY Stamp ASC);"""
                 .format(imei=imei, start=start, end=end))
-        logger.info(__("Got {:,} samples", count))
-        if count < 1: return []
-        socs = cursor.fetchall()
-        inserted = 0
 
-        def insert(row):
-            row['imei'] = imei
-            sql = "INSERT INTO webike_sfink.soc_rie ({}) VALUES ({})" \
-                .format(", ".join(row.keys()), ", ".join(["%s"] * len(row)))
-            res = cursor.execute(sql, [float(val) if isinstance(val, sp.float64) else val for val in row.values()])
-            if res != 1:
-                raise AssertionError("Illegal result {} for row {} and query\n{}".format(res, row, sql))
-            return res
-
-        # Calculate first sample, all further samples will be smoothed
-        if socs[0]['soc_smooth'] is None:
-            socs[0]['volt_smooth'] = socs[0]['volt']
-            socs[0]['temp_smooth'] = socs[0]['temp']
-            socs[0]['soc'] = calc_soc(choose_temp(socs[0]['temp_smooth']), socs[0]['volt_smooth'])
-            socs[0]['soc_smooth'] = socs[0]['soc']
-            inserted += insert(socs[0])
-
-        last_print = datetime.now()
-        for nr, (prev, cur) in enumerate(zip(socs, socs[1:])):
-            if (datetime.now() - last_print).total_seconds() > 5:
-                logger.info(__("{:,} of {:,} samples - {:.2%} complete", nr, count, nr / count))
-                last_print = datetime.now()
-
-            # Smooth voltage and temperature by 95%
+        logger.debug("Calculating SoC values")
+        insert = []
+        rows = progress(scursor.fetchall_unbuffered(), logger=logger,
+                        msg="Calculated {countf} samples after {timef}s ({ratef} samples per second)")
+        for nr, (prev, cur) in enumerate(zip_prev(rows)):
             if cur['soc_smooth'] is None:
-                cur['volt_smooth'] = .95 * prev['volt_smooth'] + .05 * cur['volt']
-                cur['temp_smooth'] = .95 * prev['temp_smooth'] + .05 * cur['temp']
+                cur['imei'] = imei
+                # Smooth voltage and temperature by 95%
+                smooth1(cur, prev, 'volt', default_value=smooth_ignore_missing)
+                smooth1(cur, prev, 'temp', default_value=smooth_ignore_missing)
                 # Run get_SOC_val on the smoothed values and re-add it to each dictionary
                 cur['soc'] = calc_soc(choose_temp(cur['temp_smooth']), cur['volt_smooth'])
                 # Smooth SoCs by 95%
-                cur['soc_smooth'] = .95 * prev['soc_smooth'] + .05 * cur['soc']
-                inserted += insert(cur)
+                smooth1(cur, prev, 'soc', default_value=smooth_ignore_missing)
+                # Queue insert
+                insert.append(cur)
 
-        logger.info(__("Inserted {:,} new samples", inserted))
-        return socs
+        if len(insert) > 0:
+            logger.info(__("Inserting {:,} newly calculated samples", len(insert)))
+            sql = "INSERT INTO webike_sfink.soc_rie ({}) VALUES ({})" \
+                .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
+            rows = [[float(val) if isinstance(val, sp.float64) else val for val in row.values()] for row in insert]
+            inserted = scursor.executemany(sql, rows)
+            logger.info(__("Inserted {:,} new samples", inserted))
 
 
 def preprocess_estimates(connection):
