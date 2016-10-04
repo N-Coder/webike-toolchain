@@ -11,11 +11,13 @@ from util.Constants import IMEIS
 from util.DB import DictCursor, QualifiedDictCursor
 from util.Logging import BraceMessage as __
 from util.Plot import order_hists
+from util.Utils import progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 
-HIST_DATA = {'start_times': [], 'distances': [], 'durations': [], 'initial_soc': [], 'final_soc': [],
+HIST_DATA = {'start_times': [], 'start_weekday': [], 'start_month': [], 'distances': [], 'durations': [],
+             'initial_soc': [], 'final_soc': [], 'trip_temp': [],
              'trip_weather': copy.deepcopy(WeatherGC.HIST_DATA), 'trip_metar': copy.deepcopy(WeatherWU.HIST_DATA)}
 
 
@@ -82,8 +84,11 @@ def extract_hist(connection):
                 "  LEFT OUTER JOIN webike_sfink.weather_metar metar ON trip.metar = metar.stamp "
                 "WHERE trip.imei = '{imei}'".format(imei=imei))
             trips = qcursor.fetchall()
-            for trip in trips:
+            for trip in progress(trips):
                 hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
+                hist_data['start_weekday'].append(trip['first_sample.Stamp'].weekday())
+                hist_data['start_month'].append(trip['first_sample.Stamp'].month)
+                hist_data['trip_temp'].append(float(trip['first_sample.TempBox']))
                 hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
 
                 if trip['trip.distance'] is not None:
@@ -114,11 +119,32 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_hour.png")
 
     plt.clf()
+    plt.hist(hist_data['start_weekday'], range=(0, 6), bins=7)
+    plt.xlabel("Weekday")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Weekday")
+    plt.savefig("out/trips_per_weekday.png")
+
+    plt.clf()
+    plt.hist(hist_data['start_month'], range=(1, 12), bins=12)
+    plt.xlabel("Month")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Month")
+    plt.savefig("out/trips_per_month.png")
+
+    plt.clf()
     plt.hist(hist_data['distances'], range=(0, 15), bins=15)
     plt.xlabel("Distance in km")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Distance")
     plt.savefig("out/trips_per_distance.png")
+
+    plt.clf()
+    plt.hist(hist_data['trip_temp'], bins=25)
+    plt.xlabel("Box Temperature °C")
+    plt.ylabel("Number of Trips")
+    plt.title("Number of Trips per Temperature")
+    plt.savefig("out/trips_per_temperature.png")
 
     plt.clf()
     plt.hist([x / timedelta(minutes=1) for x in hist_data['durations']], range=(0, 180), bins=18)
