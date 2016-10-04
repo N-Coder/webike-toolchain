@@ -98,6 +98,6 @@ class StopwatchMySQLResult(connections.MySQLResult):
         self.affected_rows = len(rows)
         self.rows = tuple(rows)
         dur = time.perf_counter() - self.connection._query_start
-        if dur > 2:
+        if dur > 4:
             logger.debug(__("Took {:.2f}s for executing query affecting {:,} rows", dur, len(rows)))
         self.connection = None  # release reference to kill cyclic reference.
