@@ -63,7 +63,7 @@ def preprocess_trips(connection):
 
 
 def extract_hist(connection):
-    logger.info("Generating histogram data")
+    logger.info("Generating trip histogram data")
 
     with connection.cursor(QualifiedDictCursor) as qcursor:
         hist_data = copy.deepcopy(HIST_DATA)
@@ -118,6 +118,7 @@ def plot_trips(hist_data):
     plt.title("Number of Trips per Hour of Day")
     plt.savefig("out/trips_per_hour.png")
 
+    # TODO fix ranges
     plt.clf()
     plt.hist(hist_data['start_weekday'], range=(0, 6), bins=7)
     plt.xlabel("Weekday")

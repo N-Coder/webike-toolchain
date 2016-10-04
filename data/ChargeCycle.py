@@ -1,14 +1,20 @@
+import copy
 import logging
 from datetime import timedelta
 
+import matplotlib.pyplot as plt
+
 from util.Constants import IMEIS, STUDY_START
-from util.DB import DictCursor, StreamingDictCursor
+from util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from util.Logging import BraceMessage as __
 from util.Utils import zip_prev, progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
+
+HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc': [], 'final_soc': [],
+             'start_weekday': [], 'start_month': []}
 
 
 def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
@@ -117,4 +123,74 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                  for cycle in cycles_curr]
             )
 
-# TODO start/end time, duration, Initial/Final State of Charge
+
+def extract_hist(connection):
+    logger.info("Generating charge cycle histogram data")
+
+    with connection.cursor(QualifiedDictCursor) as qcursor:
+        hist_data = copy.deepcopy(HIST_DATA)
+
+        for imei in IMEIS:
+            logger.info(__("Processing IMEI {}", imei))
+
+            qcursor.execute(
+                "SELECT * "
+                "FROM webike_sfink.charge_cycles cc "
+                "  LEFT OUTER JOIN imei{imei} first_sample ON first_sample.Stamp = cc.start_time "
+                "  LEFT OUTER JOIN imei{imei} last_sample ON last_sample.Stamp = cc.end_time "
+                "  LEFT OUTER JOIN webike_sfink.soc first_soc ON first_soc.time = cc.start_time"
+                "                                            AND first_soc.imei = '{imei}' "
+                "  LEFT OUTER JOIN webike_sfink.soc last_soc ON last_soc.time = cc.end_time"
+                "                                           AND last_soc.imei = '{imei}' "
+                "WHERE cc.imei = '{imei}'".format(imei=imei))
+            trips = qcursor.fetchall()
+            for trip in progress(trips):
+                hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
+                hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
+                hist_data['end_times'].append(trip['last_sample.Stamp'].replace(year=2000, month=1, day=1))
+                hist_data['start_weekday'].append(trip['first_sample.Stamp'].weekday())
+                hist_data['start_month'].append(trip['first_sample.Stamp'].month)
+
+                hist_data['initial_soc'].append(float(trip['first_soc.soc_smooth']))
+                hist_data['final_soc'].append(float(trip['last_soc.soc_smooth']))
+
+        return hist_data
+
+
+def plot_charge_cycles(hist_data):
+    logger.info("Plotting charge cycle graphs")
+    plt.clf()
+    plt.hist(hist_data['start_times'], bins=24)
+    plt.xlabel("Time of Day")
+    plt.ylabel("Number of started Charge Cycles")
+    plt.title("Number of started Charge Cycles per Hour of Day")
+    plt.savefig("out/charge_start_per_hour.png")
+
+    # TODO fix ranges
+    plt.clf()
+    plt.hist(hist_data['end_times'], bins=24)
+    plt.xlabel("Time of Day")
+    plt.ylabel("Number of ended Charge Cycles")
+    plt.title("Number of ended Charge Cycles per Hour of Day")
+    plt.savefig("out/charge_end_per_hour.png")
+
+    plt.clf()
+    plt.hist(hist_data['start_weekday'], range=(0, 6), bins=7)
+    plt.xlabel("Weekday")
+    plt.ylabel("Number of Charge Cycles")
+    plt.title("Number of Charge Cycles per Weekday")
+    plt.savefig("out/charge_per_weekday.png")
+
+    plt.clf()
+    plt.hist(hist_data['start_month'], range=(1, 12), bins=12)
+    plt.xlabel("Month")
+    plt.ylabel("Number of Charge Cycles")
+    plt.title("Number of Charge Cycles per Month")
+    plt.savefig("out/charge_per_month.png")
+
+    plt.clf()
+    plt.hist([x / timedelta(minutes=1) for x in hist_data['durations']], range=(0, 1800), bins=18)
+    plt.xlabel("Duration in Minutes")
+    plt.ylabel("Number of Charge Cycles")
+    plt.title("Number of Charge Cycles per Duration")
+    plt.savefig("out/charge_per_duration.png")
