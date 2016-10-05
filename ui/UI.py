@@ -12,7 +12,8 @@ from gi.repository import Gtk, GLib, GObject
 from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
 from matplotlib.figure import Figure
 
-from ui.ChargeGrapher import ChargeGrapher
+from ui.grapher.ChargeGrapher import ChargeGrapher
+from ui.grapher.TempGrapher import TempGrapher
 from ui.Toolbar import PlotToolbar
 from util import DB
 from util.DB import DictCursor, Connection
@@ -31,6 +32,11 @@ entries = {
     'entryPassword': 'passwd'
 }
 
+graphers = {
+    "State of Charge": ChargeGrapher,
+    "Temperature": TempGrapher
+}
+
 
 class UI:
     def __init__(self):
@@ -44,6 +50,13 @@ class UI:
         self.builder = Gtk.Builder()
         self.builder.add_from_file('ui/glade/timeline.glade')
         self.builder.connect_signals(self)
+
+        model = Gtk.ListStore(str)
+        for k, v in graphers.items():
+            model.append([k])
+        combo = self.builder.get_object('grapherCombo')
+        combo.set_model(model)
+        combo.set_active(0)
         return self
 
     def __exit__(self, type, value, traceback):
@@ -64,7 +77,9 @@ class UI:
     def draw_figure(self):
         logger.debug("enter draw_figure")
         imei = self.builder.get_object('imeiCombo').get_active_text()
-        grapher = ChargeGrapher(lambda i, b, e: GLib.idle_add(self.display_figure, i, b, e), self.cursor, self.fig)
+        grapher_name = self.builder.get_object('grapherCombo').get_active_text()
+        callback = lambda i, b, e: GLib.idle_add(self.display_figure, i, b, e)
+        grapher = graphers[grapher_name](callback, self.cursor, self.fig)
         year = int(self.builder.get_object('yearButton').get_text())
         month = int(self.builder.get_object('monthButton').get_text())
         begin = datetime(year=year, month=month, day=1)
@@ -119,11 +134,12 @@ class UI:
         self.cred['port'] = int(self.cred['port'])
 
         try:
-            self.connection = Connection(**self.cred)
+            self.connection = Connection(connect_timeout=2, **self.cred)
             self.cursor = self.connection.cursor(DictCursor)
         except MySQLError as e:
             logger.error("Could not connect to MySQL server", exc_info=e)
             label = self.builder.get_object('labelConnMsg')
+            # TODO change style
             # attr = Pango.AttrList()
             # attr['foreground'] = "#cccc00"
             # label.set_attributes(attr)
