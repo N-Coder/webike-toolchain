@@ -82,12 +82,14 @@ def default_credentials():
         cred['user'] = cred['user'] or ""
         cred['passwd'] = cred['passwd'] or ""
 
+    cred['port'] = int(cred['port'])
     return cred
 
 
 @contextmanager
 def connect(credentials=default_credentials()):
     warnings.filterwarnings('error', category=pymysql.Warning)
+    credentials['port'] = int(credentials['port'])
     connection = _Connection(**credentials)
     start = time.perf_counter()
     try:

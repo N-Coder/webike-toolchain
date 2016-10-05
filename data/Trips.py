@@ -88,8 +88,10 @@ def extract_hist(connection):
                 hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
                 hist_data['start_weekday'].append(trip['first_sample.Stamp'].weekday())
                 hist_data['start_month'].append(trip['first_sample.Stamp'].month)
-                hist_data['trip_temp'].append(float(trip['first_sample.TempBox']))
                 hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
+
+                if trip['first_sample.TempBox'] is not None:
+                    hist_data['trip_temp'].append(float(trip['first_sample.TempBox']))
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
@@ -105,7 +107,7 @@ def extract_hist(connection):
                     if key.startswith(weather_prefix):
                         WeatherGC.append_hist(hist_data['trip_weather'], key[len(weather_prefix):], val)
 
-                WeatherWU.append_hist(hist_data['trip_metar'], trip['metar.metar'])
+                WeatherWU.append_hist(hist_data['trip_metar'], trip['metar.metar'], trip['metar.stamp'])
         return hist_data
 
 

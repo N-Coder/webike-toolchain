@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 ########################################################################################################################
 # Constants developed by Tommy Carpenter for his PhD thesis
 # see http://hdl.handle.net/10012/9096
+# Please note that this approach is only valid during inactivity and the values calculated during trips are
+# extremely inaccurate, as the currents vary greatly during usage of the e-bike. (see chapter 8.3.3)
 ########################################################################################################################
 
 d = {'-20': {}, '-10': {}, '23': {}, '0': {}, '45': {}}

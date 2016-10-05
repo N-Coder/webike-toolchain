@@ -124,18 +124,16 @@ def read_data_db(connection):
         return data
 
 
-def extract_hist(metars):
+def extract_hist(rows):
     hist_data = copy.deepcopy(HIST_DATA)
-    for metar in metars:
-        if isinstance(metar, dict):
-            metar = metar['metar']
-        append_hist(hist_data, metar)
+    for row in rows:
+        append_hist(hist_data, row['metar'], row['stamp'])
     return hist_data
 
 
-def append_hist(hist_data, metar):
+def append_hist(hist_data, metar, stamp):
     if isinstance(metar, str):
-        metar = Metar.Metar(metar)
+        metar = Metar.Metar(metar, month=stamp.month, year=stamp.year)
     assert isinstance(metar, Metar.Metar)
 
     if metar.temp:
