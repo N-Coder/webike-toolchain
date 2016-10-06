@@ -3,10 +3,10 @@ import logging
 import scipy as sp
 from scipy.optimize import curve_fit
 
-from util.Constants import IMEIS
-from util.DB import DictCursor, StreamingDictCursor
-from util.Logging import BraceMessage as __
-from util.Utils import zip_prev, smooth1, smooth_ignore_missing, progress
+from webike.util.Constants import IMEIS
+from webike.util.DB import DictCursor, StreamingDictCursor
+from webike.util.Logging import BraceMessage as __
+from webike.util.Utils import zip_prev, smooth1, smooth_ignore_missing, progress
 
 __author__ = "Tommy Carpenter, Niko Fink"
 logger = logging.getLogger(__name__)

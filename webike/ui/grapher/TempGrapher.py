@@ -1,8 +1,8 @@
 import numpy as np
 from matplotlib import dates as mdates
 
-from ui.Grapher import Grapher
-from util.Utils import smooth
+from webike.ui.Grapher import Grapher
+from webike.util.Utils import smooth
 
 
 class TempGrapher(Grapher):

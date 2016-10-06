@@ -4,8 +4,8 @@ import time
 
 from pymysql import connections
 
-from util.Logging import BraceMessage as __
-from util.Utils import progress
+from webike.util.Logging import BraceMessage as __
+from webike.util.Utils import progress
 
 logger = logging.getLogger(__name__)
 

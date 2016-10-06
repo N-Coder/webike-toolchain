@@ -2,8 +2,8 @@ import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import patches as mpatches
 
-from ui.Grapher import Grapher
-from util.Utils import smooth, discharge_curr_to_ampere
+from webike.ui.Grapher import Grapher
+from webike.util.Utils import smooth, discharge_curr_to_ampere
 
 
 class ChargeGrapher(Grapher):
@@ -11,8 +11,8 @@ class ChargeGrapher(Grapher):
         self.cursor.execute(
             """SELECT Stamp, ChargingCurr, DischargeCurr, soc.soc_smooth AS soc_smooth, soc_rie.soc_smooth AS soc_rie_smooth
             FROM imei{imei} imei
-            JOIN webike_sfink.soc ON Stamp = soc.time AND soc.imei = '{imei}'
-            JOIN webike_sfink.soc_rie ON Stamp = soc_rie.time AND soc_rie.imei = '{imei}'
+            LEFT OUTER JOIN webike_sfink.soc ON Stamp = soc.time AND soc.imei = '{imei}'
+            LEFT OUTER JOIN webike_sfink.soc_rie ON Stamp = soc_rie.time AND soc_rie.imei = '{imei}'
             WHERE Stamp >= '{min}' AND Stamp <= '{max}'
             ORDER BY Stamp ASC"""
                 .format(imei=imei, min=begin, max=end))

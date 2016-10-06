@@ -8,8 +8,8 @@ from contextlib import contextmanager
 import pymysql
 from pymysql.cursors import Cursor, DictCursor as _DictCursor, SSDictCursor as _SSDictCursor
 
-from util.DBStopwatch import StopwatchConnection as _Connection
-from util.Logging import BraceMessage as __
+from webike.util.DBStopwatch import StopwatchConnection as _Connection
+from webike.util.Logging import BraceMessage as __
 
 # for Connection without Stopwatch:
 # from pymysql.connections import _Connection
@@ -67,7 +67,7 @@ def default_credentials():
     cred.update(dict([(k, os.environ[v]) for k, v in cred_env.items() if v in os.environ]))
 
     parser = configparser.ConfigParser()
-    conf_files = ["config.ini", "instance/config.ini", os.path.expanduser("~/iss4e_config.ini"),
+    conf_files = ["config.ini", "instance/config.ini", "../config.ini", os.path.expanduser("~/iss4e_config.ini"),
                   os.path.expanduser("~/.iss4e_config.ini")]
     valid_confs = parser.read(conf_files)
     if len(valid_confs) > 0:

@@ -1,5 +1,4 @@
 import gi
-from pymysql import MySQLError
 
 gi.require_version('Gtk', '3.0')
 
@@ -11,13 +10,14 @@ from dateutil.relativedelta import relativedelta
 from gi.repository import Gtk, GLib, GObject
 from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
 from matplotlib.figure import Figure
+from pymysql import MySQLError
 
-from ui.grapher.ChargeGrapher import ChargeGrapher
-from ui.grapher.TempGrapher import TempGrapher
-from ui.Toolbar import PlotToolbar
-from util import DB
-from util.DB import DictCursor, Connection
-from util.Logging import BraceMessage as __
+from webike.ui.Toolbar import PlotToolbar
+from webike.ui.grapher.ChargeGrapher import ChargeGrapher
+from webike.ui.grapher.TempGrapher import TempGrapher
+from webike.util import DB
+from webike.util.DB import DictCursor, Connection
+from webike.util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class UI:
 
     def __enter__(self):
         self.builder = Gtk.Builder()
-        self.builder.add_from_file('ui/glade/timeline.glade')
+        self.builder.add_from_file('webike/ui/glade/timeline.glade')
         self.builder.connect_signals(self)
 
         model = Gtk.ListStore(str)
@@ -163,7 +163,12 @@ class UI:
         GLib.idle_add(self.draw_figure)
 
 
-GObject.threads_init()
-with UI() as ui:
-    ui.show()
-    Gtk.main()
+def main():
+    GObject.threads_init()
+    with UI() as ui:
+        ui.show()
+        Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

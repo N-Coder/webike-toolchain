@@ -5,13 +5,13 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 
-from data import WeatherGC
-from data import WeatherWU
-from util.Constants import IMEIS
-from util.DB import DictCursor, QualifiedDictCursor
-from util.Logging import BraceMessage as __
-from util.Plot import order_hists
-from util.Utils import progress
+from webike.data import WeatherGC
+from webike.data import WeatherWU
+from webike.util.Constants import IMEIS
+from webike.util.DB import DictCursor, QualifiedDictCursor
+from webike.util.Logging import BraceMessage as __
+from webike.util.Plot import order_hists
+from webike.util.Utils import progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

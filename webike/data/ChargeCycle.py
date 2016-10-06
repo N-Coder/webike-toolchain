@@ -4,10 +4,10 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 
-from util.Constants import IMEIS, STUDY_START
-from util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
-from util.Logging import BraceMessage as __
-from util.Utils import zip_prev, progress
+from webike.util.Constants import IMEIS, STUDY_START
+from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
+from webike.util.Logging import BraceMessage as __
+from webike.util.Utils import zip_prev, progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from time import perf_counter
 
-from util.Logging import BraceMessage as __
+from webike.util.Logging import BraceMessage as __
 
 
 def daterange(start, stop=datetime.now(), step=timedelta(days=1)):
