@@ -18,8 +18,7 @@ HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc':
 
 
 def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
-                        min_charge_samples=100, max_sample_delay=timedelta(minutes=10),
-                        min_charge_time=timedelta(minutes=10)):
+                        min_charge_samples, max_sample_delay, min_charge_time):
     """Detect charging cycles based on the ChargingCurr."""
     cycles = []
     discarded_cycles = []
@@ -67,8 +66,11 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
     return cycles, discarded_cycles
 
 
-def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, smooth_func=None):
-    type = charge_attr[0]
+def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, smooth_func=None, type=None,
+                      min_charge_samples=100, max_sample_delay=timedelta(minutes=10),
+                      min_charge_time=timedelta(minutes=10)):
+    if not type:
+        type = charge_attr[0]
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
@@ -106,7 +108,8 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
 
                 logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
                 cycles_curr, cycles_curr_disc = \
-                    extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end)
+                    extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end,
+                                        min_charge_samples, max_sample_delay, min_charge_time)
 
             # delete outdated cycles and write newly detected ones
             logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",

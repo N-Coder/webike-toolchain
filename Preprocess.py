@@ -23,9 +23,9 @@ with DB.connect() as connection:
     SoC.preprocess_estimates(connection)
     connection.commit()
 
-    # preprocess_cycles(connection, charge_attr='ChargingCurr',
-    #                   charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
-    preprocess_cycles(connection, charge_attr='DischargeCurr', smooth_func=smooth_func,
+    preprocess_cycles(connection, charge_attr='ChargingCurr',
+                      charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
+    preprocess_cycles(connection, charge_attr='DischargeCurr', smooth_func=smooth_func, min_charge_samples=1,
                       charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
     connection.commit()
 
