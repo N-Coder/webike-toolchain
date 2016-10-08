@@ -72,7 +72,7 @@ def parse_data(files):
     for file in files:
         logger.debug(__("Parsing {}", file))
 
-        with open(file, newline='', encoding='cp1250') as f:
+        with open(file, newline='', encoding='utf8') as f:
             reader = csv.reader(f)
             try:
                 skip = True
