@@ -55,14 +55,14 @@ def smooth1(sample, last_sample, label, label_smooth=None, alpha=.95, default_va
     if not label_smooth:
         label_smooth = label + '_smooth'
 
-    if not (sample and label in sample and sample[label]) or \
+    if not (sample and label in sample and sample[label] is not None) or \
             (callable(is_valid) and not is_valid(sample, last_sample, label)):
         if callable(default_value):
-            sample[label_smooth] = default_value(sample, last_sample, label)
+            sample[label_smooth] = default_value(sample, last_sample, label, label_smooth)
         else:
             sample[label_smooth] = default_value
     else:
-        if not (last_sample and label_smooth in last_sample and last_sample[label_smooth]):
+        if not (last_sample and label_smooth in last_sample and last_sample[label_smooth] is not None):
             # 1nd sensible value in the list, use it as starting point for the smoothing
             sample[label_smooth] = sample[label]
         else:
@@ -72,8 +72,14 @@ def smooth1(sample, last_sample, label, label_smooth=None, alpha=.95, default_va
     return sample
 
 
-def smooth_ignore_missing(sample, last_sample, label):
-    return last_sample[label] if last_sample else None
+def smooth_ignore_missing(sample, last_sample, label, label_smooth):
+    if last_sample:
+        if label_smooth in last_sample:
+            return last_sample[label_smooth]
+        elif label in last_sample:
+            return last_sample[label]
+
+    return None
 
 
 def progress(iterable, logger=logging, level=logging.INFO, delay=5,
