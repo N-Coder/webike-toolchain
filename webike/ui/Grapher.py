@@ -25,3 +25,7 @@ class Grapher():
 
     def draw_figure_async(self, imei, begin, end, *data):
         raise NotImplementedError()
+
+    @classmethod
+    def requires_month(cls):
+        return True

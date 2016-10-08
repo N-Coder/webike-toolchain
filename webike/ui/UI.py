@@ -15,6 +15,7 @@ from pymysql import MySQLError
 from webike.ui.Toolbar import PlotToolbar
 from webike.ui.grapher.ChargeGrapher import ChargeGrapher
 from webike.ui.grapher.TempGrapher import TempGrapher
+from webike.ui.grapher.DensityGrapher import DensityGrapher
 from webike.util import DB
 from webike.util.DB import DictCursor, Connection
 from webike.util.Logging import BraceMessage as __
@@ -34,7 +35,8 @@ entries = {
 
 graphers = {
     "State of Charge": ChargeGrapher,
-    "Temperature": TempGrapher
+    "Temperature": TempGrapher,
+    "Data Density": DensityGrapher
 }
 
 
@@ -52,7 +54,7 @@ class UI:
         self.builder.connect_signals(self)
 
         model = Gtk.ListStore(str)
-        for k, v in graphers.items():
+        for k, v in sorted(graphers.items()):
             model.append([k])
         combo = self.builder.get_object('grapherCombo')
         combo.set_model(model)
@@ -103,12 +105,20 @@ class UI:
         self.builder.get_object('topbarContainer').set_sensitive(not processing)
         self.builder.get_object('toolbarContainer').set_sensitive(not processing)
 
+        self.on_grapher_changed(None)
+
     ###########################################################################
     # Signals
     ###########################################################################
 
     def on_window_destroy(self, widget):
         Gtk.main_quit()
+
+    def on_grapher_changed(self, widget):
+        grapher_name = self.builder.get_object('grapherCombo').get_active_text()
+        requires_month = graphers[grapher_name].requires_month()
+        self.builder.get_object('yearButton').set_sensitive(requires_month)
+        self.builder.get_object('monthButton').set_sensitive(requires_month)
 
     def do_redraw(self, widget):
         self.draw_figure()

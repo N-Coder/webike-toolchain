@@ -481,6 +481,7 @@
                 <items>
                   <item translatable="yes">Grapher</item>
                 </items>
+                <signal name="changed" handler="on_grapher_changed" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>
