@@ -9,7 +9,7 @@ class TempGrapher(Grapher):
     def get_data_async(self, imei, begin, end):
         self.cursor.execute(
             """SELECT Stamp, TempBattery, TempBox, AtmosPress
-            FROM imei0587 imei
+            FROM imei{imei} imei
             WHERE Stamp >= '{min}' AND Stamp <= '{max}'
             ORDER BY Stamp ASC"""
                 .format(imei=imei, min=begin, max=end))
