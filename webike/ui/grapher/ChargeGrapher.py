@@ -9,10 +9,9 @@ from webike.util.Utils import smooth, discharge_curr_to_ampere
 class ChargeGrapher(Grapher):
     def get_data_async(self, imei, begin, end):
         self.cursor.execute(
-            """SELECT Stamp, ChargingCurr, DischargeCurr, soc.soc_smooth AS soc_smooth, soc_rie.soc_smooth AS soc_rie_smooth
+            """SELECT Stamp, ChargingCurr, DischargeCurr, soc.soc_smooth AS soc_smooth
             FROM imei{imei} imei
             LEFT OUTER JOIN webike_sfink.soc ON Stamp = soc.time AND soc.imei = '{imei}'
-            LEFT OUTER JOIN webike_sfink.soc_rie ON Stamp = soc_rie.time AND soc_rie.imei = '{imei}'
             WHERE Stamp >= '{min}' AND Stamp <= '{max}'
             ORDER BY Stamp ASC"""
                 .format(imei=imei, min=begin, max=end))
@@ -47,12 +46,7 @@ class ChargeGrapher(Grapher):
         ax.plot(
             list([x['Stamp'] for x in charge_values]),
             list([x['soc_smooth'] or np.nan for x in charge_values]),
-            'b-', label="State of Charge [Box]", alpha=0.9
-        )
-        ax.plot(
-            list([x['Stamp'] for x in charge_values]),
-            list([x['soc_rie_smooth'] or np.nan for x in charge_values]),
-            label="State of Charge [Riemann]", alpha=0.9, color='purple'
+            'b-', label="State of Charge", alpha=0.9
         )
         ax.plot(
             list([x['Stamp'] for x in charge_values]),

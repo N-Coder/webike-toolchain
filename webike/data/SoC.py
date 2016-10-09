@@ -238,7 +238,7 @@ def generate_estimate(connection, imei, start, end):
         # so that the smoothed values are deterministic for further runs
         scursor.execute(
             """(SELECT *
-             FROM webike_sfink.soc_rie
+             FROM webike_sfink.soc
              WHERE time < '{start}' AND imei = '{imei}'
              ORDER BY time DESC
              LIMIT 1)
@@ -253,7 +253,7 @@ def generate_estimate(connection, imei, start, end):
                soc.soc,
                soc.soc_smooth
              FROM imei{imei} imei
-               LEFT OUTER JOIN webike_sfink.soc_rie soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
+               LEFT OUTER JOIN webike_sfink.soc soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
              WHERE Stamp >= '{start}' AND Stamp <= '{end}' AND BatteryVoltage IS NOT NULL AND BatteryVoltage != 0
              ORDER BY Stamp ASC);"""
                 .format(imei=imei, start=start, end=end))
@@ -277,7 +277,7 @@ def generate_estimate(connection, imei, start, end):
 
         if len(insert) > 0:
             logger.info(__("Inserting {:,} newly calculated samples", len(insert)))
-            sql = "INSERT INTO webike_sfink.soc_rie ({}) VALUES ({})" \
+            sql = "INSERT INTO webike_sfink.soc ({}) VALUES ({})" \
                 .format(", ".join(cur.keys()), ", ".join(["%s"] * len(cur)))
             rows = [[float(val) if isinstance(val, sp.float64) else val for val in row.values()] for row in insert]
             inserted = scursor.executemany(sql, rows)
@@ -303,7 +303,7 @@ def preprocess_estimates(connection):
                   MIN(time)   AS min,
                   MAX(time)   AS max,
                   COUNT(time) AS count
-                FROM webike_sfink.soc_rie
+                FROM webike_sfink.soc
                 WHERE imei = '{imei}'""".format(imei=imei)
             )
             vals = cursor.fetchall()
@@ -320,7 +320,7 @@ def preprocess_estimates(connection):
             cursor.execute(
                 """SELECT MIN(imei.Stamp) AS min, MAX(imei.Stamp) AS max, COUNT(imei.Stamp) AS count
                 FROM imei{imei} imei
-                  LEFT OUTER JOIN webike_sfink.soc_rie soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
+                  LEFT OUTER JOIN webike_sfink.soc soc ON imei.Stamp = soc.time AND soc.imei = '{imei}'
                 WHERE soc.time IS NULL AND imei.BatteryVoltage IS NOT NULL AND imei.BatteryVoltage != 0"""
                     .format(imei=imei)
             )
