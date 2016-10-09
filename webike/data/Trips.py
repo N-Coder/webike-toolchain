@@ -10,7 +10,7 @@ from webike.data import WeatherWU
 from webike.util.Constants import IMEIS
 from webike.util.DB import DictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
-from webike.util.Plot import order_hists
+from webike.util.Plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
 from webike.util.Utils import progress
 
 __author__ = "Niko Fink"
@@ -85,7 +85,7 @@ def extract_hist(connection):
                 "WHERE trip.imei = '{imei}'".format(imei=imei))
             trips = qcursor.fetchall()
             for trip in progress(trips):
-                hist_data['start_times'].append(trip['first_sample.Stamp'].replace(year=2000, month=1, day=1))
+                hist_data['start_times'].append(to_hour_bin(trip['first_sample.Stamp']))
                 hist_data['start_weekday'].append(trip['first_sample.Stamp'].weekday())
                 hist_data['start_month'].append(trip['first_sample.Stamp'].month)
                 hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
@@ -114,22 +114,21 @@ def extract_hist(connection):
 def plot_trips(hist_data):
     logger.info("Plotting trip graphs")
     plt.clf()
-    plt.hist(hist_data['start_times'], bins=24)
+    hist_day_hours(plt.gca(), hist_data['start_times'])
     plt.xlabel("Time of Day")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Hour of Day")
     plt.savefig("out/trips_per_hour.png")
 
-    # TODO fix ranges
     plt.clf()
-    plt.hist(hist_data['start_weekday'], range=(0, 6), bins=7)
+    hist_week_days(plt.gca(), hist_data['start_weekday'])
     plt.xlabel("Weekday")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Weekday")
     plt.savefig("out/trips_per_weekday.png")
 
     plt.clf()
-    plt.hist(hist_data['start_month'], range=(1, 12), bins=12)
+    hist_year_months(plt.gca(), hist_data['start_month'])
     plt.xlabel("Month")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Month")

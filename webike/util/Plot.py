@@ -1,12 +1,43 @@
 import logging
 import sys
 from collections import Counter
+from datetime import datetime, time, timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
+
+BIN_HOUR_DATE = datetime(year=2000, day=1, month=1)
+BIN_DAY_HOURS_LIM = (BIN_HOUR_DATE, BIN_HOUR_DATE + timedelta(days=1))
+BINS_DAY_HOURS = {'range': BIN_DAY_HOURS_LIM, 'bins': 24, 'align': 'left'}
+BINS_WEEK_DAYS = {'range': (0, 7), 'bins': 7, 'align': 'left'}
+BINS_YEAR_MONTHS = {'range': (1, 13), 'bins': 12, 'align': 'left'}
+
+
+def to_hour_bin(dt):
+    if not isinstance(dt, time):
+        dt = dt.time()
+    return datetime.combine(BIN_HOUR_DATE.date(), dt)
+
+
+def hist_day_hours(ax, times):
+    ax.hist(times, **BINS_DAY_HOURS)
+    ax.set_xlim([t - timedelta(minutes=30) for t in BIN_DAY_HOURS_LIM])
+
+
+def hist_year_months(ax, months):
+    ax.hist(months, **BINS_YEAR_MONTHS)
+    # ax.xaxis.set_major_formatter(
+    #     FixedFormatter(["X", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]))
+    ax.set_xlim(0.5, 11.5)
+
+
+def hist_week_days(ax, weekdays):
+    ax.hist(weekdays, **BINS_WEEK_DAYS)
+    # ax.xaxis.set_major_formatter(FixedFormatter(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]))
+    ax.set_xlim(-0.5, 6.5)
 
 
 def plot_weather(hist_datasets, out_file=None, fig_offset=None):
