@@ -1,6 +1,7 @@
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from webike.ui.Grapher import Grapher
+from webike.util.Logging import BraceMessage as __
 
 
 class DensityGrapher(Grapher):
@@ -14,7 +15,9 @@ class DensityGrapher(Grapher):
         return self.cursor.fetchall()
 
     def draw_figure_async(self, imei, begin, end, *data):
-        counts = data
+        if len(data) >= 1 and (data[0]['year'] < 2000 or data[0]['month'] < 1):
+            self.logger.warning(__("IMEI {} has NULL row: {}", imei, data[0]))
+        counts = [r for r in data if r['year'] > 0 and r['month'] > 0]
 
         self.fig.clear()
         ax = self.fig.add_subplot(111)
