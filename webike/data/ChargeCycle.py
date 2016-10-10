@@ -1,8 +1,10 @@
 import copy
+import inspect
 import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
+from tabulate import tabulate
 
 from webike.util.Constants import IMEIS, STUDY_START
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
@@ -72,6 +74,12 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                       min_charge_time=timedelta(minutes=10)):
     if not type:
         type = charge_attr[0]
+
+    frame = inspect.currentframe()
+    logger.debug(__("Preprocessing charging cycles with parameters\n{}{}", inspect
+                    .getframeinfo(frame)[2], inspect.getargvalues(frame)))
+
+    cycles = {}
     with connection.cursor(DictCursor) as cursor:
         for nr, imei in enumerate(IMEIS):
             logger.info(__("Preprocessing charging cycles for {}", imei))
@@ -111,6 +119,7 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                 cycles_curr, cycles_curr_disc = \
                     extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end,
                                         min_charge_samples, max_sample_delay, min_charge_time)
+                cycles[imei] = (cycles_curr, cycles_curr_disc)
 
             # delete outdated cycles and write newly detected ones
             logger.info(__("Writing {} detected cycles to DB with label '{}', discarded {} cycles",
@@ -126,6 +135,13 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                 [[imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], type]
                  for cycle in cycles_curr]
             )
+
+    logger.debug(__("Results of preprocessing charging cycles with parameters\n{}{}\n{}",
+                    inspect.getframeinfo(frame)[2], inspect.getargvalues(frame),
+                    tabulate([(imei, len(cycles[imei][0]), len(cycles[imei][1])) for imei in cycles],
+                             headers=("imei", "accepted", "discarded"))))
+
+    return cycles
 
 
 def extract_hist(connection):
