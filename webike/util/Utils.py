@@ -1,3 +1,4 @@
+import inspect
 import logging
 from datetime import datetime, timedelta
 from time import perf_counter
@@ -95,3 +96,18 @@ def progress(iterable, logger=logging, level=logging.INFO, delay=5,
             last_print = perf_counter()
             last_rows = nr
         yield val
+
+
+def dump_args(frame):
+    """
+    Print this information using
+        "{}(\n  {})".format(func_name, ",\n  ".join(["{} = {}".format(k, v) for k, v in arg_list])
+    """
+    arg_names, varargs, kwargs, values = inspect.getargvalues(frame)
+    arg_list = list([(n, values[n]) for n in arg_names])
+    if varargs:
+        arg_list.append(("*args", varargs))
+    if kwargs:
+        arg_list.extend([("**" + k, v) for k, v in kwargs.items()])
+    func_name = inspect.getframeinfo(frame)[2]
+    return func_name, arg_list

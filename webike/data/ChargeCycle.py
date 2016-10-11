@@ -10,7 +10,7 @@ from webike.util.Constants import IMEIS, STUDY_START
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
 from webike.util.Plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
-from webike.util.Utils import zip_prev, progress
+from webike.util.Utils import zip_prev, progress, dump_args
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -75,9 +75,9 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
     if not type:
         type = charge_attr[0]
 
-    frame = inspect.currentframe()
-    logger.debug(__("Preprocessing charging cycles with parameters\n{}{}", inspect
-                    .getframeinfo(frame)[2], inspect.getargvalues(frame)))
+    funcname, arglist = dump_args(inspect.currentframe())
+    logger.debug(__("Preprocessing charging cycles with parameters {}(\n  {})",
+                    funcname, ",\n  ".join(["{} = {}".format(k, v) for k, v in arglist])))
 
     cycles = {}
     with connection.cursor(DictCursor) as cursor:
@@ -136,8 +136,8 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                  for cycle in cycles_curr]
             )
 
-    logger.debug(__("Results of preprocessing charging cycles with parameters\n{}{}\n{}",
-                    inspect.getframeinfo(frame)[2], inspect.getargvalues(frame),
+    logger.debug(__("Results of preprocessing charging cycles with parameters {}(\n  {})\n{}",
+                    funcname, ",\n  ".join(["{} = {}".format(k, v) for k, v in arglist]),
                     tabulate([(imei, len(cycles[imei][0]), len(cycles[imei][1])) for imei in cycles],
                              headers=("imei", "accepted", "discarded"))))
 

@@ -26,6 +26,7 @@ def main():
         preprocess_cycles(connection, charge_attr='ChargingCurr',
                           charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
         preprocess_cycles(connection, charge_attr='DischargeCurr', smooth_func=smooth_func, min_charge_samples=1,
+                          min_charge_time=timedelta(minutes=1),
                           charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
         connection.commit()
 
