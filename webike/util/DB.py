@@ -7,7 +7,6 @@ from contextlib import contextmanager
 
 import pymysql
 from pymysql.cursors import Cursor, DictCursor as _DictCursor, SSDictCursor as _SSDictCursor
-
 from webike.util.DBStopwatch import StopwatchConnection as _Connection
 from webike.util.Logging import BraceMessage as __
 
@@ -48,7 +47,7 @@ StreamingDictCursor = _SSDictCursor
 Connection = _Connection
 
 
-def default_credentials():
+def default_credentials(category="WeBike-DB"):
     cred = {
         'host': "tornado.cs.uwaterloo.ca",
         'port': 3306,
@@ -57,12 +56,13 @@ def default_credentials():
         'db': "webike"
     }
 
+    env_prefix = category.upper().replace("-", "_")
     cred_env = {
-        'host': 'WEBIKE_DB_HOST',
-        'port': 'WEBIKE_DB_PORT',
-        'user': 'WEBIKE_DB_USER',
-        'passwd': 'WEBIKE_DB_PASS',
-        'db': 'WEBIKE_DB_NAME'
+        'host': env_prefix + '_HOST',
+        'port': env_prefix + '_PORT',
+        'user': env_prefix + '_USER',
+        'passwd': env_prefix + '_PASS',
+        'db': env_prefix + '_NAME'
     }
     cred.update(dict([(k, os.environ[v]) for k, v in cred_env.items() if v in os.environ]))
 
@@ -71,7 +71,7 @@ def default_credentials():
                   os.path.expanduser("~/.iss4e_config.ini")]
     valid_confs = parser.read(conf_files)
     if len(valid_confs) > 0:
-        cred.update(dict([(k, v) for k, v in parser.items('WeBike-DB') if k in cred]))
+        cred.update(dict([(k, v) for k, v in parser.items(category) if k in cred]))
         logger.debug(__("Read config from files: {}", valid_confs))
     else:
         logger.debug(__("No valid config files found, read config from environment"))
@@ -87,7 +87,10 @@ def default_credentials():
 
 
 @contextmanager
-def connect(credentials=default_credentials()):
+def connect(credentials=None):
+    if not credentials:
+        credentials = default_credentials()
+
     warnings.filterwarnings('error', category=pymysql.Warning)
     credentials['port'] = int(credentials['port'])
     connection = _Connection(**credentials)
