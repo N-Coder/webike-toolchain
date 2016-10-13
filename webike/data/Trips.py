@@ -4,7 +4,6 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
-
 from webike.data import WeatherGC
 from webike.data import WeatherWU
 from webike.util.Constants import IMEIS
@@ -34,14 +33,6 @@ def preprocess_trips(connection):
                 logger.info(__("{} of {}: processing new trip {}#{}",
                                nr + 1, len(unprocessed_trips), imei, trip['id']))
 
-                # unfortunately, we can't use prepared statements as the table names change
-                # (table and column names have to be static in SQL)
-                cursor.execute("SELECT Stamp FROM imei{} WHERE Stamp > '{}' ORDER BY Stamp ASC LIMIT 1"
-                               .format(imei, trip['start_time']))
-                first_sample = cursor.fetchone()
-                cursor.execute("SELECT Stamp FROM imei{} WHERE Stamp < '{}' ORDER BY Stamp DESC LIMIT 1"
-                               .format(imei, trip['end_time']))
-                last_sample = cursor.fetchone()
                 cursor.execute(
                     "SELECT datetime, ABS(TIMESTAMPDIFF(SECOND, datetime, '{}')) AS diff "  # FIMXE check time zone
                     "FROM webike_sfink.weather ORDER BY diff LIMIT 1"
@@ -56,7 +47,7 @@ def preprocess_trips(connection):
                 res = cursor.execute(
                     "INSERT INTO webike_sfink.trips(imei, trip, start_time, end_time, distance, weather, metar) VALUES "
                     "(%s,%s,%s,%s,%s,%s,%s)",
-                    (imei, trip['id'], first_sample['Stamp'], last_sample['Stamp'], trip['distance'],
+                    (imei, trip['id'], trip['start_time'], trip['end_time'], trip['distance'],
                      weather_sample['datetime'], metar_sample['stamp']))
                 if res != 1:
                     raise AssertionError("Illegal result {} for row #{}: {}".format(res, nr, trip))
