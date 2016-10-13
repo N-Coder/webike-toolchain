@@ -88,7 +88,7 @@ def progress(iterable, logger=logging, level=logging.INFO, delay=5,
     msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}')
 
     last_print = start = perf_counter()
-    last_rows = 0
+    last_rows = nr = 0
     for nr, val in enumerate(iterable):
         if (perf_counter() - last_print) > delay:
             logger.log(level, __(msg, count=nr, time=perf_counter() - start,
@@ -96,6 +96,10 @@ def progress(iterable, logger=logging, level=logging.INFO, delay=5,
             last_print = perf_counter()
             last_rows = nr
         yield val
+
+    if (perf_counter() - last_print) > 1:
+        logger.log(level, __(msg, count=nr, time=perf_counter() - start,
+                             rate=nr / (perf_counter() - start)))
 
 
 def dump_args(frame):
