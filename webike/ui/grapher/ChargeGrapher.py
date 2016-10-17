@@ -6,6 +6,8 @@ from webike.Preprocess import preprocess_soc_func
 from webike.ui.Grapher import Grapher
 from webike.util.Utils import smooth, discharge_curr_to_ampere
 
+CYCLE_TYPE_COLORS = {'D': 'r', 'C': 'g', 's': 'm'}
+
 
 class ChargeGrapher(Grapher):
     def get_data_async(self, imei, begin, end):
@@ -71,13 +73,14 @@ class ChargeGrapher(Grapher):
         for trip in trips:
             ax.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
         for cycle in charge_cycles:
-            ax.axvspan(cycle['start_time'], cycle['end_time'], color=('m' if cycle['type'] == 'D' else 'c'),
+            ax.axvspan(cycle['start_time'], cycle['end_time'], color=(CYCLE_TYPE_COLORS[cycle['type']]),
                        alpha=0.5, lw=0)
 
         handles = list(ax.get_legend_handles_labels()[0])
         handles.append(mpatches.Patch(color='y', label='Trips'))
-        handles.append(mpatches.Patch(color='c', label='Charging Cycles [ChargingCurr]'))
-        handles.append(mpatches.Patch(color='m', label='Charging Cycles [DischargeCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['C'], label='Charging Cycles [ChargingCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['D'], label='Charging Cycles [DischargeCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['s'], label='Charging Cycles [soc_smooth]'))
         legend = ax.legend(handles=handles, loc='upper right')
         legend.set_visible(legend_visible)
 
