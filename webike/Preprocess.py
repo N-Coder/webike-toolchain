@@ -18,9 +18,9 @@ def smooth_func(samples, charge_attr):
 
 
 def preprocess_soc_func(samples, charge_attr):
-    samples = differentiate(samples, charge_attr)
-    samples = smooth(samples, charge_attr, alpha=0.7, default_value=0,
-                     is_valid=smooth_reset_stale(timedelta(minutes=5)))
+    attr_diff = charge_attr + '_diff'
+    samples = differentiate(samples, charge_attr, label_diff=attr_diff, delta_time=timedelta(hours=1))
+    samples = smooth(samples, attr_diff, is_valid=smooth_reset_stale(timedelta(minutes=5)))
     return samples
 
 
@@ -34,7 +34,7 @@ def main():
         preprocess_cycles(connection, charge_attr='DischargeCurr', preprocess_func=smooth_func,
                           charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
         preprocess_cycles(connection, charge_attr='soc_smooth', preprocess_func=preprocess_soc_func,
-                          charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
+                          charge_thresh_start=(lambda x: x < 8), charge_thresh_end=(lambda x: x > 2))
         connection.commit()
         # TODO merge detected cycles or only use one method
 

@@ -38,14 +38,15 @@ def differentiate(samples, label, label_diff=None, delta_time=timedelta(seconds=
     if not label_diff:
         label_diff = label + '_diff'
 
-    cur = None
-    for prev, cur in zip_prev(samples)[1:]:
-        prev[label_diff] = (cur[label] - prev[label]) / \
-                           ((cur['Stamp'] - prev['Stamp']) / delta_time)
-        yield prev
-    if cur is not None:
-        cur[label_diff] = 0
-        yield cur
+    last_sample = None
+    for sample in samples:
+        if last_sample is None or last_sample[label] is None or sample[label] is None:
+            sample[label_diff] = 0
+        else:
+            sample[label_diff] = (sample[label] - last_sample[label]) / \
+                                 ((sample['Stamp'] - last_sample['Stamp']) / delta_time)
+        yield sample
+        last_sample = sample
 
 
 def smooth(samples, label, label_smooth=None, alpha=.95, default_value=None, is_valid=None):

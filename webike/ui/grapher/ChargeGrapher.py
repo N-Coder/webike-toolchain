@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import patches as mpatches
+from webike.Preprocess import preprocess_soc_func
 
 from webike.ui.Grapher import Grapher
 from webike.util.Utils import smooth, discharge_curr_to_ampere
@@ -12,12 +13,14 @@ class ChargeGrapher(Grapher):
             """SELECT Stamp, ChargingCurr, DischargeCurr, soc.soc_smooth AS soc_smooth
             FROM imei{imei} imei
             LEFT OUTER JOIN webike_sfink.soc ON Stamp = soc.time AND soc.imei = '{imei}'
-            WHERE Stamp >= '{min}' AND Stamp <= '{max}'
+            WHERE Stamp >= '{min}' AND Stamp <= '{max}' AND
+              (ChargingCurr IS NOT NULL OR DischargeCurr IS NOT NULL OR soc.soc_smooth IS NOT NULL)
             ORDER BY Stamp ASC"""
                 .format(imei=imei, min=begin, max=end))
         charge_values = self.cursor.fetchall()
         charge_values = smooth(charge_values, 'ChargingCurr')
         charge_values = smooth(charge_values, 'DischargeCurr')
+        charge_values = preprocess_soc_func(charge_values, 'soc_smooth')
         charge_values = list(charge_values)  # smooth returns an iterator, this forces generation of all elements
 
         self.cursor.execute(
@@ -47,6 +50,11 @@ class ChargeGrapher(Grapher):
             list([x['Stamp'] for x in charge_values]),
             list([x['soc_smooth'] or np.nan for x in charge_values]),
             'b-', label="State of Charge", alpha=0.9
+        )
+        ax.plot(
+            list([x['Stamp'] for x in charge_values]),
+            list([x['soc_smooth_diff_smooth'] or np.nan for x in charge_values]),
+            'm-', label="delta State of Charge", alpha=0.9
         )
         ax.plot(
             list([x['Stamp'] for x in charge_values]),
