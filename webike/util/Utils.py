@@ -34,6 +34,20 @@ def discharge_curr_to_ampere(val):
     return (val - 504) * 0.033 if val else 0
 
 
+def differentiate(samples, label, label_diff=None, delta_time=timedelta(seconds=1)):
+    if not label_diff:
+        label_diff = label + '_diff'
+
+    cur = None
+    for prev, cur in zip_prev(samples)[1:]:
+        prev[label_diff] = (cur[label] - prev[label]) / \
+                           ((cur['Stamp'] - prev['Stamp']) / delta_time)
+        yield prev
+    if cur is not None:
+        cur[label_diff] = 0
+        yield cur
+
+
 def smooth(samples, label, label_smooth=None, alpha=.95, default_value=None, is_valid=None):
     """Smooth values using the formula
     `samples[n][label_smooth] = alpha * samples[n-1][label_smooth] + (1 - alpha) * samples[n][label]`
@@ -81,6 +95,10 @@ def smooth_ignore_missing(sample, last_sample, label, label_smooth):
             return last_sample[label]
 
     return None
+
+
+def smooth_reset_stale(max_sample_delay):
+    return lambda sample, last_sample, label: last_sample and last_sample['Stamp'] - sample['Stamp'] < max_sample_delay
 
 
 def progress(iterable, logger=logging, level=logging.INFO, delay=5,

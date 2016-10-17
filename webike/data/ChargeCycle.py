@@ -5,7 +5,6 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 from tabulate import tabulate
-
 from webike.util.Constants import IMEIS, STUDY_START
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
@@ -20,9 +19,9 @@ HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc':
              'start_weekday': [], 'start_month': []}
 
 
-def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
-                        min_charge_samples, max_sample_delay, min_charge_time):
-    """Detect charging cycles based on the ChargingCurr."""
+def extract_cycles(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
+                   min_charge_samples, max_sample_delay, min_charge_time):
+    """Detect charging cycles based on the charge_attr."""
     cycles = []
     discarded_cycles = []
     charge_start = charge_end = None
@@ -54,6 +53,7 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
                 charge_avg = (charge_avg + sample[charge_attr]) / 2
 
             if charge_end:
+                # TODO merge consecutive cycles?
                 cycle = (charge_start, charge_end, charge_sample_count, charge_avg)
                 # only count as charging cycle if it lasts for more than a few mins, we got enough samples
                 # and we actually increased the SoC
@@ -69,7 +69,7 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
     return cycles, discarded_cycles
 
 
-def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, smooth_func=None, type=None,
+def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, preprocess_func=None, type=None,
                       min_charge_samples=100, max_sample_delay=timedelta(minutes=10),
                       min_charge_time=timedelta(minutes=10)):
     if not type:
@@ -112,13 +112,13 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                     ORDER BY Stamp ASC"""
                         .format(imei=imei, attr=charge_attr, start_time=start_time))
                 charge = scursor.fetchall_unbuffered()
-                if callable(smooth_func):
-                    charge = smooth_func(charge, charge_attr)
+                if callable(preprocess_func):
+                    charge = preprocess_func(charge, charge_attr)
 
                 logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
                 cycles_curr, cycles_curr_disc = \
-                    extract_cycles_curr(charge, charge_attr, charge_thresh_start, charge_thresh_end,
-                                        min_charge_samples, max_sample_delay, min_charge_time)
+                    extract_cycles(charge, charge_attr, charge_thresh_start, charge_thresh_end,
+                                   min_charge_samples, max_sample_delay, min_charge_time)
                 cycles[imei] = (cycles_curr, cycles_curr_disc)
 
             # delete outdated cycles and write newly detected ones
