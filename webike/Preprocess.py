@@ -14,14 +14,15 @@ logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %
 
 
 def smooth_func(samples, charge_attr):
-    return smooth(samples, charge_attr, is_valid=smooth_reset_stale(timedelta(minutes=5)))
+    return smooth(samples, charge_attr, is_valid=smooth_reset_stale(timedelta(minutes=5))), charge_attr
 
 
 def preprocess_soc_func(samples, charge_attr):
     attr_diff = charge_attr + '_diff'
     samples = differentiate(samples, charge_attr, label_diff=attr_diff, delta_time=timedelta(hours=1))
-    samples = smooth(samples, attr_diff, is_valid=smooth_reset_stale(timedelta(minutes=5)))
-    return samples
+    attr_smooth = attr_diff + '_smooth'
+    samples = smooth(samples, attr_diff, label_smooth=attr_smooth, is_valid=smooth_reset_stale(timedelta(minutes=5)))
+    return samples, attr_smooth
 
 
 def main():

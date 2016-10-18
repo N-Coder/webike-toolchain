@@ -113,7 +113,7 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                         .format(imei=imei, attr=charge_attr, start_time=start_time))
                 charge = scursor.fetchall_unbuffered()
                 if callable(preprocess_func):
-                    charge = preprocess_func(charge, charge_attr)
+                    charge, charge_attr = preprocess_func(charge, charge_attr)
 
                 logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
                 cycles_curr, cycles_curr_disc = \
