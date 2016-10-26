@@ -2,7 +2,6 @@ import logging
 
 import scipy as sp
 from scipy.optimize import curve_fit
-
 from webike.util.Constants import IMEIS
 from webike.util.DB import DictCursor, StreamingDictCursor
 from webike.util.Logging import BraceMessage as __
@@ -260,8 +259,7 @@ def generate_estimate(connection, imei, start, end):
 
         logger.debug("Calculating SoC values")
         insert = []
-        rows = progress(scursor.fetchall_unbuffered(), logger=logger,
-                        msg="Calculated {countf} samples after {timef}s ({ratef} samples per second)")
+        rows = progress(scursor.fetchall_unbuffered(), logger=logger, verb="Calculated", objects="samples")
         for nr, (prev, cur) in enumerate(zip_prev(rows)):
             if cur['soc_smooth'] is None:
                 cur['imei'] = imei

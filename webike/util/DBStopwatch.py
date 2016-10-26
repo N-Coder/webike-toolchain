@@ -3,7 +3,6 @@ import logging
 import time
 
 from pymysql import connections
-
 from webike.util.Logging import BraceMessage as __
 from webike.util.Utils import progress
 
@@ -88,8 +87,8 @@ class StopwatchMySQLResult(connections.MySQLResult):
     def _read_rowdata_packet(self):
         """Read a rowdata packet for each data row in the result set."""
         rows = []
-        for _ in progress(itertools.count(), logger=logger, level=logging.DEBUG,
-                          msg="Got {countf} rows after {timef}s ({ratef} rows per second)"):  # == while True
+        for _ in progress(itertools.count(), logger=logger, level=logging.DEBUG, verb="Got",
+                          objects="rows"):  # == while True
             packet = self.connection._read_packet()
             if self._check_packet_is_eof(packet):
                 break

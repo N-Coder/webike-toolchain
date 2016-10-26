@@ -5,7 +5,6 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 from tabulate import tabulate
-
 from webike.util.Constants import IMEIS, STUDY_START
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
@@ -29,8 +28,7 @@ def extract_cycles_curr(charge_samples, charge_attr, charge_thresh_start, charge
     charge_sample_count = 0
     charge_avg = 0
 
-    charge_samples = progress(charge_samples, logger=logger,
-                              msg="Processed {countf} samples after {timef}s ({ratef} samples per second)")
+    charge_samples = progress(charge_samples, logger=logger, objects="samples")
     for last_sample, sample in zip_prev(charge_samples):
         # did charging start?
         if not charge_start:
