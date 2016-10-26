@@ -103,22 +103,30 @@ def smooth_reset_stale(max_sample_delay):
 
 
 def progress(iterable, logger=logging, level=logging.INFO, delay=5,
-             msg="Processed {countf} entries after {timef}s ({ratef} entries per second)"):
-    msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}')
+             msg="{verb} {countf} {name} after {timef}s ({ratef}/{avgratef} {name} per second)",
+             objects="entries", verb="Processed"):
+    msg = msg.format(countf='{count:,}', timef='{time:.2f}', ratef='{rate:,.2f}', avgratef='{avgrate:,.2f}',
+                     name=objects, verb=verb)
 
     last_print = start = perf_counter()
     last_rows = nr = 0
-    for nr, val in enumerate(iterable):
-        if (perf_counter() - last_print) > delay:
-            logger.log(level, __(msg, count=nr, time=perf_counter() - start,
-                                 rate=(nr - last_rows) / (perf_counter() - last_print)))
+    val = None
+
+    def print(last):
+        nonlocal last_rows, last_print
+        if (perf_counter() - last) > delay:
+            logger.log(level, __(msg, count=nr, time=perf_counter() - start, value=val,
+                                 rate=(nr - last_rows) / (perf_counter() - last_print),
+                                 avgrate=nr / (perf_counter() - start)))
             last_print = perf_counter()
             last_rows = nr
-        yield val
 
-    if (perf_counter() - last_print) > 1:
-        logger.log(level, __(msg, count=nr, time=perf_counter() - start,
-                             rate=nr / (perf_counter() - start)))
+    for nr, val in enumerate(iterable):
+        print(last_print)
+        yield val
+        # print(last_print)
+
+    print(start)
 
 
 def dump_args(frame):

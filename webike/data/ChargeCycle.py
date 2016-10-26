@@ -28,8 +28,7 @@ def extract_cycles(cycle_samples, cycle_thresh_attr, cycle_thresh_start, cycle_t
     cycle_sample_count = 0
     cycle_avg = 0
 
-    cycle_samples = progress(cycle_samples, logger=logger,
-                             msg="Processed {countf} samples after {timef}s ({ratef} samples per second)")
+    cycle_samples = progress(cycle_samples, logger=logger, objects="samples")
     for last_sample, sample in zip_prev(cycle_samples):
         # did cycle start?
         if not cycle_start:
