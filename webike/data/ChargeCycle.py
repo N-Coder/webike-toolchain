@@ -19,53 +19,52 @@ HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc':
              'start_weekday': [], 'start_month': []}
 
 
-def extract_cycles(charge_samples, charge_attr, charge_thresh_start, charge_thresh_end,
-                   min_charge_samples, max_sample_delay, min_charge_time):
-    """Detect charging cycles based on the charge_attr."""
+def extract_cycles(cycle_samples, cycle_thresh_attr, cycle_thresh_start, cycle_thresh_end,
+                   min_cycle_samples, max_sample_delay, min_cycle_time, get_sample_time):
+    """Detect cycles based on the cycle_attr."""
     cycles = []
     discarded_cycles = []
-    charge_start = charge_end = None
-    charge_sample_count = 0
-    charge_avg = 0
+    cycle_start = cycle_end = None
+    cycle_sample_count = 0
+    cycle_avg = 0
 
-    charge_samples = progress(charge_samples, logger=logger,
-                              msg="Processed {countf} samples after {timef}s ({ratef} samples per second)")
-    for last_sample, sample in zip_prev(charge_samples):
-        # did charging start?
-        if not charge_start:
-            if charge_thresh_start(sample[charge_attr]):
+    cycle_samples = progress(cycle_samples, logger=logger,
+                             msg="Processed {countf} samples after {timef}s ({ratef} samples per second)")
+    for last_sample, sample in zip_prev(cycle_samples):
+        # did cycle start?
+        if not cycle_start:
+            if cycle_thresh_start(sample[cycle_thresh_attr]):
                 # yes, because ChargingCurr is high
-                charge_start = sample
-                charge_sample_count = 1
-                charge_avg = sample[charge_attr]
+                cycle_start = sample
+                cycle_sample_count = 1
+                cycle_avg = sample[cycle_thresh_attr]
 
-        # did charging stop?
+        # did cycle stop?
         else:
-            if charge_thresh_end(sample[charge_attr]):
+            if cycle_thresh_end(sample[cycle_thresh_attr]):
                 # yes, because ChargingCurr is back to normal
-                charge_end = last_sample
-            elif sample['Stamp'] - last_sample['Stamp'] > max_sample_delay:
+                cycle_end = last_sample
+            elif get_sample_time(sample) - get_sample_time(last_sample) > max_sample_delay:
                 # yes, because we didn't get a sample for the last few mins
-                charge_end = last_sample
+                cycle_end = last_sample
             else:
                 # nope, continue counting
-                charge_sample_count += 1
-                charge_avg = (charge_avg + sample[charge_attr]) / 2
+                cycle_sample_count += 1
+                cycle_avg = (cycle_avg + sample[cycle_thresh_attr]) / 2
 
-            if charge_end:
+            if cycle_end:
                 # TODO merge consecutive cycles?
-                cycle = (charge_start, charge_end, charge_sample_count, charge_avg)
-                # only count as charging cycle if it lasts for more than a few mins, we got enough samples
-                # and we actually increased the SoC
-                if charge_end['Stamp'] - charge_start['Stamp'] > min_charge_time \
-                        and charge_sample_count > min_charge_samples:
+                cycle = (cycle_start, cycle_end, cycle_sample_count, cycle_avg)
+                # only count as cycle if it lasts for more than a few mins and we got enough samples
+                if get_sample_time(cycle_end) - get_sample_time(cycle_start) > min_cycle_time \
+                        and cycle_sample_count > min_cycle_samples:
                     cycles.append(cycle)
                 else:
                     discarded_cycles.append(cycle)
-                charge_start = None
-                charge_end = None
-                charge_sample_count = 0
-                charge_avg = 0
+                cycle_start = None
+                cycle_end = None
+                cycle_sample_count = 0
+                cycle_avg = 0
     return cycles, discarded_cycles
 
 
@@ -118,7 +117,8 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                 logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
                 cycles_curr, cycles_curr_disc = \
                     extract_cycles(charge, charge_attr, charge_thresh_start, charge_thresh_end,
-                                   min_charge_samples, max_sample_delay, min_charge_time)
+                                   min_charge_samples, max_sample_delay, min_charge_time,
+                                   lambda sample: sample['Stamp'])
                 cycles[imei] = (cycles_curr, cycles_curr_disc)
 
             # delete outdated cycles and write newly detected ones
