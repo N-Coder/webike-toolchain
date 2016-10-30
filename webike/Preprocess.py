@@ -5,7 +5,7 @@ from webike.data import SoC
 from webike.data import Trips
 from webike.data import WeatherGC
 from webike.data import WeatherWU
-from webike.data.ChargeCycle import preprocess_cycles
+from webike.data.ChargeCycle import preprocess_cycles, ChargeCycleDetection
 from webike.util import DB
 from webike.util.Utils import smooth, smooth_reset_stale, differentiate
 
@@ -13,16 +13,45 @@ __author__ = "Niko Fink"
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
 
 
-def smooth_func(samples, charge_attr):
-    return smooth(samples, charge_attr, is_valid=smooth_reset_stale(timedelta(minutes=5))), charge_attr
+class ChargingCurrCCDetection(ChargeCycleDetection):
+    def __init__(self, *args, **kwargs):
+        super().__init__('ChargingCurr', *args, **kwargs)
+
+    def is_start(self, sample, previous):
+        return sample[self.attr] < 50
+
+    def is_end(self, sample, previous):
+        return sample[self.attr] > 50 or self.get_duration(previous, sample) > timedelta(minutes=10)
 
 
-def preprocess_soc_func(samples, charge_attr):
-    attr_diff = charge_attr + '_diff'
-    samples = differentiate(samples, charge_attr, label_diff=attr_diff, delta_time=timedelta(hours=1))
-    attr_smooth = attr_diff + '_smooth'
-    samples = smooth(samples, attr_diff, label_smooth=attr_smooth, is_valid=smooth_reset_stale(timedelta(minutes=5)))
-    return samples, attr_smooth
+class DischargeCurrCCDetection(ChargeCycleDetection):
+    def __init__(self, *args, **kwargs):
+        super().__init__('DischargeCurr_smooth', *args, **kwargs)
+
+    def is_start(self, sample, previous):
+        return sample[self.attr] < 490
+
+    def is_end(self, sample, previous):
+        return sample[self.attr] > 490 or self.get_duration(previous, sample) > timedelta(minutes=10)
+
+    def __call__(self, cycle_samples):
+        cycle_samples = smooth(cycle_samples, 'DischargeCurr', is_valid=smooth_reset_stale(timedelta(minutes=5)))
+        return super(self)(cycle_samples)
+
+
+class SoCDerivCCDetection(ChargeCycleDetection):
+    def __init__(self, *args, **kwargs):
+        super().__init__('soc_smooth_diff', *args, **kwargs)
+
+    def is_start(self, sample, previous):
+        return sample[self.attr] < 8
+
+    def is_end(self, sample, previous):
+        return sample[self.attr] > 2 or self.get_duration(previous, sample) > timedelta(minutes=10)
+
+    def __call__(self, cycle_samples):
+        cycle_samples = differentiate(cycle_samples, 'soc_smooth', delta_time=timedelta(hours=1))
+        return super(self)(cycle_samples)
 
 
 def main():
@@ -30,12 +59,9 @@ def main():
         SoC.preprocess_estimates(connection)
         connection.commit()
 
-        preprocess_cycles(connection, charge_attr='ChargingCurr',
-                          charge_thresh_start=(lambda x: x > 50), charge_thresh_end=(lambda x: x < 50))
-        preprocess_cycles(connection, charge_attr='DischargeCurr', preprocess_func=smooth_func,
-                          charge_thresh_start=(lambda x: x < 490), charge_thresh_end=(lambda x: x > 490))
-        preprocess_cycles(connection, charge_attr='soc_smooth', preprocess_func=preprocess_soc_func,
-                          charge_thresh_start=(lambda x: x < 8), charge_thresh_end=(lambda x: x > 2))
+        preprocess_cycles(connection, ChargingCurrCCDetection())
+        preprocess_cycles(connection, DischargeCurrCCDetection())
+        preprocess_cycles(connection, SoCDerivCCDetection())
         connection.commit()
         # TODO merge detected cycles or only use one method
 

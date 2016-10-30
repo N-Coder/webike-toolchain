@@ -1,15 +1,15 @@
 import copy
-import inspect
 import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
 from tabulate import tabulate
+from webike.util import ActivityDetection
 from webike.util.Constants import IMEIS, STUDY_START
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
 from webike.util.Plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
-from webike.util.Utils import zip_prev, progress, dump_args
+from webike.util.Utils import progress
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -19,63 +19,39 @@ HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc':
              'start_weekday': [], 'start_month': []}
 
 
-def extract_cycles(cycle_samples, cycle_thresh_attr, cycle_thresh_start, cycle_thresh_end,
-                   min_cycle_samples, max_sample_delay, min_cycle_time, get_sample_time):
-    """Detect cycles based on the cycle_attr."""
-    cycles = []
-    discarded_cycles = []
-    cycle_start = cycle_end = None
-    cycle_sample_count = 0
-    cycle_avg = 0
+class ChargeCycleDetection(ActivityDetection):
+    def __init__(self, attr, min_sample_count=100, min_cycle_duration=timedelta(minutes=10)):
+        self.attr = attr
+        self.min_sample_count = min_sample_count
+        self.min_cycle_duration = min_cycle_duration
+        super().__init__()
 
-    cycle_samples = progress(cycle_samples, logger=logger, objects="samples")
-    for last_sample, sample in zip_prev(cycle_samples):
-        # did cycle start?
-        if not cycle_start:
-            if cycle_thresh_start(sample[cycle_thresh_attr]):
-                # yes, because ChargingCurr is high
-                cycle_start = sample
-                cycle_sample_count = 1
-                cycle_avg = sample[cycle_thresh_attr]
-
-        # did cycle stop?
+    def accumulate_samples(self, new_sample, accumulator):
+        if accumulator is not None:
+            avg, cnt = accumulator
+            return (avg + new_sample[self.attr]) / 2, cnt + 1
         else:
-            if cycle_thresh_end(sample[cycle_thresh_attr]):
-                # yes, because ChargingCurr is back to normal
-                cycle_end = last_sample
-            elif get_sample_time(sample) - get_sample_time(last_sample) > max_sample_delay:
-                # yes, because we didn't get a sample for the last few mins
-                cycle_end = last_sample
-            else:
-                # nope, continue counting
-                cycle_sample_count += 1
-                cycle_avg = (cycle_avg + sample[cycle_thresh_attr]) / 2
+            return new_sample[self.attr], 1
 
-            if cycle_end:
-                # TODO merge consecutive cycles?
-                cycle = (cycle_start, cycle_end, cycle_sample_count, cycle_avg)
-                # only count as cycle if it lasts for more than a few mins and we got enough samples
-                if get_sample_time(cycle_end) - get_sample_time(cycle_start) > min_cycle_time \
-                        and cycle_sample_count > min_cycle_samples:
-                    cycles.append(cycle)
-                else:
-                    discarded_cycles.append(cycle)
-                cycle_start = None
-                cycle_end = None
-                cycle_sample_count = 0
-                cycle_avg = 0
-    return cycles, discarded_cycles
+    def check_reject_reason(self, cycle):
+        cycle_start, cycle_end, cycle_acc = cycle
+        acc_avg, acc_cnt = cycle_acc
+        if acc_cnt < self.min_sample_count:
+            return "acc_cnt<{}".format(self.min_sample_count)
+        elif self.get_duration(cycle_end, cycle_start) < self.min_cycle_duration:
+            return "duration<{}".format(self.min_cycle_duration)
+        else:
+            return None
+
+    @staticmethod
+    def get_duration(cycle_end, cycle_start):
+        return cycle_start['Stamp'] - cycle_end['Stamp']
 
 
-def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thresh_end, preprocess_func=None, type=None,
-                      min_charge_samples=100, max_sample_delay=timedelta(minutes=10),
-                      min_charge_time=timedelta(minutes=10)):
+def preprocess_cycles(connection, detector: ChargeCycleDetection, type=None):
     if not type:
-        type = charge_attr[0]
-
-    funcname, arglist = dump_args(inspect.currentframe())
-    logger.debug(__("Preprocessing charging cycles with parameters {}(\n  {})",
-                    funcname, ",\n  ".join(["{} = {}".format(k, v) for k, v in arglist])))
+        type = detector.attr[0]
+    logger.debug(__("Preprocessing charging cycles using {}", detector))
 
     cycles = {}
     with connection.cursor(DictCursor) as cursor:
@@ -108,16 +84,11 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                     JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
                     WHERE {attr} IS NOT NULL AND {attr} != 0 AND Stamp >= '{start_time}'
                     ORDER BY Stamp ASC"""
-                        .format(imei=imei, attr=charge_attr, start_time=start_time))
+                        .format(imei=imei, attr=detector.attr, start_time=start_time))
                 charge = scursor.fetchall_unbuffered()
-                if callable(preprocess_func):
-                    charge, charge_attr = preprocess_func(charge, charge_attr)
 
-                logger.info(__("Detecting charging cycles after {} based on {}", start_time, charge_attr))
-                cycles_curr, cycles_curr_disc = \
-                    extract_cycles(charge, charge_attr, charge_thresh_start, charge_thresh_end,
-                                   min_charge_samples, max_sample_delay, min_charge_time,
-                                   lambda sample: sample['Stamp'])
+                logger.info(__("Detecting charging cycles after {} using {}", start_time, detector))
+                cycles_curr, cycles_curr_disc = detector(charge)
                 cycles[imei] = (cycles_curr, cycles_curr_disc)
 
             # delete outdated cycles and write newly detected ones
@@ -135,8 +106,7 @@ def preprocess_cycles(connection, charge_attr, charge_thresh_start, charge_thres
                  for cycle in cycles_curr]
             )
 
-    logger.debug(__("Results of preprocessing charging cycles with parameters {}(\n  {})\n{}",
-                    funcname, ",\n  ".join(["{} = {}".format(k, v) for k, v in arglist]),
+    logger.debug(__("Results of preprocessing charging cycles using {}:\n{}", detector,
                     tabulate([(imei, len(cycles[imei][0]), len(cycles[imei][1])) for imei in cycles],
                              headers=("imei", "accepted", "discarded"))))
 
