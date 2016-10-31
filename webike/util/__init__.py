@@ -1,5 +1,7 @@
-from .activity import ActivityDetection
+from .activity import ActivityDetection, MergingActivityDetection, Cycle
 
 __all__ = [
-    'ActivityDetection'
+    'ActivityDetection',
+    'MergingActivityDetection',
+    'Cycle'
 ]

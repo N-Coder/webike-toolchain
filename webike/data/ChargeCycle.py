@@ -5,7 +5,7 @@ from datetime import timedelta
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 from webike.util import ActivityDetection
-from webike.util.Constants import IMEIS, STUDY_START
+from webike.util.Constants import IMEIS, STUDY_START, TD0
 from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from webike.util.Logging import BraceMessage as __
 from webike.util.Plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
@@ -38,14 +38,16 @@ class ChargeCycleDetection(ActivityDetection):
         acc_avg, acc_cnt = cycle_acc
         if acc_cnt < self.min_sample_count:
             return "acc_cnt<{}".format(self.min_sample_count)
-        elif self.get_duration(cycle_end, cycle_start) < self.min_cycle_duration:
+        elif self.get_duration(cycle_start, cycle_end) < self.min_cycle_duration:
             return "duration<{}".format(self.min_cycle_duration)
         else:
             return None
 
     @staticmethod
-    def get_duration(cycle_end, cycle_start):
-        return cycle_start['Stamp'] - cycle_end['Stamp']
+    def get_duration(first, second):
+        dur = second['Stamp'] - first['Stamp']
+        assert dur >= TD0, "second sample {} happened before first {}".format(second, first)
+        return dur
 
 
 def preprocess_cycles(connection, detector: ChargeCycleDetection, type=None):
