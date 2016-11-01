@@ -1,9 +1,12 @@
 import numpy as np
 from matplotlib import dates as mdates
 from matplotlib import patches as mpatches
+from webike.Preprocess import preprocess_soc_func
 
 from webike.ui.Grapher import Grapher
 from webike.util.Utils import smooth, discharge_curr_to_ampere
+
+CYCLE_TYPE_COLORS = {'D': 'r', 'C': 'g', 's': 'm'}
 
 
 class ChargeGrapher(Grapher):
@@ -12,12 +15,14 @@ class ChargeGrapher(Grapher):
             """SELECT Stamp, ChargingCurr, DischargeCurr, soc.soc_smooth AS soc_smooth
             FROM imei{imei} imei
             LEFT OUTER JOIN webike_sfink.soc ON Stamp = soc.time AND soc.imei = '{imei}'
-            WHERE Stamp >= '{min}' AND Stamp <= '{max}'
+            WHERE Stamp >= '{min}' AND Stamp <= '{max}' AND
+              (ChargingCurr IS NOT NULL OR DischargeCurr IS NOT NULL OR soc.soc_smooth IS NOT NULL)
             ORDER BY Stamp ASC"""
                 .format(imei=imei, min=begin, max=end))
         charge_values = self.cursor.fetchall()
         charge_values = smooth(charge_values, 'ChargingCurr')
         charge_values = smooth(charge_values, 'DischargeCurr')
+        charge_values = preprocess_soc_func(charge_values, 'soc_smooth')
         charge_values = list(charge_values)  # smooth returns an iterator, this forces generation of all elements
 
         self.cursor.execute(
@@ -50,6 +55,11 @@ class ChargeGrapher(Grapher):
         )
         ax.plot(
             list([x['Stamp'] for x in charge_values]),
+            list([x['soc_smooth_diff_smooth'] or np.nan for x in charge_values]),
+            'm-', label="delta State of Charge", alpha=0.9
+        )
+        ax.plot(
+            list([x['Stamp'] for x in charge_values]),
             list([x['ChargingCurr_smooth'] / 200 if x['ChargingCurr'] else np.nan for x in charge_values]),
             'g-', label="Charging Current", alpha=0.9
         )
@@ -63,13 +73,14 @@ class ChargeGrapher(Grapher):
         for trip in trips:
             ax.axvspan(trip['start_time'], trip['end_time'], color='y', alpha=0.5, lw=0)
         for cycle in charge_cycles:
-            ax.axvspan(cycle['start_time'], cycle['end_time'], color=('m' if cycle['type'] == 'D' else 'c'),
+            ax.axvspan(cycle['start_time'], cycle['end_time'], color=(CYCLE_TYPE_COLORS[cycle['type']]),
                        alpha=0.5, lw=0)
 
         handles = list(ax.get_legend_handles_labels()[0])
         handles.append(mpatches.Patch(color='y', label='Trips'))
-        handles.append(mpatches.Patch(color='c', label='Charging Cycles [ChargingCurr]'))
-        handles.append(mpatches.Patch(color='m', label='Charging Cycles [DischargeCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['C'], label='Charging Cycles [ChargingCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['D'], label='Charging Cycles [DischargeCurr]'))
+        handles.append(mpatches.Patch(color=CYCLE_TYPE_COLORS['s'], label='Charging Cycles [soc_smooth]'))
         legend = ax.legend(handles=handles, loc='upper right')
         legend.set_visible(legend_visible)
 
