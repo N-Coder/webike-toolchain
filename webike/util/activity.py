@@ -1,7 +1,10 @@
 import abc
 import collections
+import warnings
 from datetime import timedelta
+from typing import List
 
+from webike.util.Constants import TD0
 from webike.util.Utils import zip_prev
 
 Cycle = collections.namedtuple('Cycle', ['start', 'end', 'stats', 'reject_reason'])
@@ -21,10 +24,10 @@ class ActivityDetection:
     def check_reject_reason(self, cycle: Cycle):
         return None
 
-    def accumulate_samples(self, new_sample, accumulator):
+    def accumulate_samples(self, sample, accumulator):
         return None
 
-    def __call__(self, cycle_samples):
+    def __call__(self, cycle_samples) -> (List[Cycle], List[Cycle]):
         self.cycles = []
         self.discarded_cycles = []
         self.cycle_start = None
@@ -35,7 +38,7 @@ class ActivityDetection:
                 if self.is_start(sample, previous):
                     # yes, mark this as the beginning
                     self.cycle_start = sample
-                    self.cycle_acc = self.accumulate_samples(sample, None)
+                    self.cycle_acc = self.accumulate_samples(sample, {})
 
             # did cycle stop?
             else:
@@ -92,7 +95,9 @@ class MergingActivityDetection(ActivityDetection):
         new_start, new_end = self.extract_cycle_time(new_cycle)
 
         # if both ranges intersect, they can be merged
-        if max(last_start, new_start) <= min(last_end, new_end): return True
+        if max(last_start, new_start) <= min(last_end, new_end):
+            warnings.warn("merging intersecting cycles will break stats\n{} + {}".format(last_cycle, new_cycle))
+            return True
 
         gap = new_start - last_end
         assert (isinstance(gap, timedelta) and gap > TD0) or (not isinstance(gap, timedelta) and gap > 0), \

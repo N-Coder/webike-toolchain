@@ -27,16 +27,19 @@ class ChargeCycleDetection(ActivityDetection):
         super().__init__()
 
     def accumulate_samples(self, new_sample, accumulator):
-        if accumulator is not None:
-            avg, cnt = accumulator
-            return (avg + new_sample[self.attr]) / 2, cnt + 1
+        if 'avg' in accumulator:
+            accumulator['avg'] = (accumulator['avg'] + new_sample[self.attr]) / 2
         else:
-            return new_sample[self.attr], 1
+            accumulator['avg'] = new_sample[self.attr]
+
+        if 'cnt' not in accumulator:
+            accumulator['cnt'] = 0
+        accumulator['cnt'] += 1
+        return accumulator
 
     def check_reject_reason(self, cycle):
         cycle_start, cycle_end, cycle_acc = cycle
-        acc_avg, acc_cnt = cycle_acc
-        if acc_cnt < self.min_sample_count:
+        if cycle_acc['cnt'] < self.min_sample_count:
             return "acc_cnt<{}".format(self.min_sample_count)
         elif self.get_duration(cycle_start, cycle_end) < self.min_cycle_duration:
             return "duration<{}".format(self.min_cycle_duration)
@@ -104,7 +107,7 @@ def preprocess_cycles(connection, detector: ChargeCycleDetection, type=None):
                 """INSERT INTO webike_sfink.charge_cycles
                 (imei, start_time, end_time, sample_count, avg_thresh_val, type)
                 VALUES (%s, %s, %s, %s, %s, %s);""",
-                [[imei, cycle[0]['Stamp'], cycle[1]['Stamp'], cycle[2], cycle[3], type]
+                [[imei, cycle.start['Stamp'], cycle.end['Stamp'], cycle.stats['cnt'], cycle.stats['avg'], type]
                  for cycle in cycles_curr]
             )
 
