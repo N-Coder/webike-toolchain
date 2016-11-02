@@ -82,8 +82,8 @@ def extract_hist(connection):
                 hist_data['durations'].append(
                     (trip['last_sample.Stamp'] - trip['first_sample.Stamp']) / timedelta(minutes=1))
 
-                if trip['first_sample.TempBox'] is not None:
-                    hist_data['trip_temp'].append(float(trip['first_sample.TempBox']))
+                if trip['last_sample.TempBox'] is not None:
+                    hist_data['trip_temp'].append(float(trip['last_sample.TempBox']))
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
