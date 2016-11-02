@@ -79,7 +79,8 @@ def extract_hist(connection):
                 hist_data['start_times'].append(to_hour_bin(trip['first_sample.Stamp']))
                 hist_data['start_weekday'].append(trip['first_sample.Stamp'].weekday())
                 hist_data['start_month'].append(trip['first_sample.Stamp'].month)
-                hist_data['durations'].append(trip['last_sample.Stamp'] - trip['first_sample.Stamp'])
+                hist_data['durations'].append(
+                    (trip['last_sample.Stamp'] - trip['first_sample.Stamp']) / timedelta(minutes=1))
 
                 if trip['first_sample.TempBox'] is not None:
                     hist_data['trip_temp'].append(float(trip['first_sample.TempBox']))
@@ -140,7 +141,7 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_temperature.png")
 
     plt.clf()
-    plt.hist([x / timedelta(minutes=1) for x in hist_data['durations']], range=(0, 180), bins=18)
+    plt.hist(hist_data['durations'], range=(0, 180), bins=18)
     plt.xlabel("Duration in Minutes")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Duration")
