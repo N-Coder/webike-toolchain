@@ -27,12 +27,21 @@ def default_logging_config():
         level: DEBUG
         stream: ext://sys.stdout
       file:
-        class : logging.handlers.RotatingFileHandler
+        class : logging.handlers.FileHandler
         formatter: default
-        filename: logconfig.log
-        maxBytes: 1024
+        level: DEBUG
+        filename: python-main.log
+      rotating-file:
+        class : logging.handlers.TimedRotatingFileHandler
+        formatter: default
+        level: DEBUG
+        filename: python-main-r.log
+        when: midnight
         backupCount: 3
     loggers:
+      root:
+        level: DEBUG
+        handlers: [console, file]
       urllib3:
         level: WARNING
       requests:
