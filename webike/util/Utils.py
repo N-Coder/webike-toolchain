@@ -34,7 +34,7 @@ def discharge_curr_to_ampere(val):
     return (val - 504) * 0.033 if val else 0
 
 
-def differentiate(samples, label, label_diff=None, delta_time=timedelta(seconds=1)):
+def differentiate(samples, label, label_diff=None, delta_time=timedelta(seconds=1), attr_time='Stamp'):
     if not label_diff:
         label_diff = label + '_diff'
 
@@ -44,7 +44,7 @@ def differentiate(samples, label, label_diff=None, delta_time=timedelta(seconds=
             sample[label_diff] = 0
         else:
             sample[label_diff] = (sample[label] - last_sample[label]) / \
-                                 ((sample['Stamp'] - last_sample['Stamp']) / delta_time)
+                                 ((sample[attr_time] - last_sample[attr_time]) / delta_time)
         yield sample
         last_sample = sample
 
