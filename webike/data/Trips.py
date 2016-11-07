@@ -4,13 +4,14 @@ from datetime import timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
+from iss4e.db.mysql import DictCursor, QualifiedDictCursor
+from iss4e.util import BraceMessage as __
+from iss4e.util import progress
+
 from webike.data import WeatherGC
 from webike.data import WeatherWU
-from webike.util.Constants import IMEIS
-from webike.util.DB import DictCursor, QualifiedDictCursor
-from webike.util.Logging import BraceMessage as __
-from webike.util.Plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
-from webike.util.Utils import progress
+from webike.util.constants import IMEIS
+from webike.util.plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)

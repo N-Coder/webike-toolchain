@@ -7,3 +7,8 @@ IMEIS = ['0587', '0603', '0636', '0657', '0665', '0669', '1210', '1473', '2910',
 
 STUDY_START = datetime(year=2014, month=1, day=1)
 TD0 = timedelta(0)
+
+
+def discharge_curr_to_ampere(val):
+    """Convert DischargeCurr from the DB from the raw sensor value to amperes"""
+    return (val - 504) * 0.033 if val else 0

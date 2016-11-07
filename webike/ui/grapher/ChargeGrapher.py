@@ -1,10 +1,12 @@
+from datetime import timedelta
+
 import numpy as np
+from iss4e.util.math import smooth, differentiate
 from matplotlib import dates as mdates
 from matplotlib import patches as mpatches
-from webike.Preprocess import preprocess_soc_func
 
+from util.constants import discharge_curr_to_ampere
 from webike.ui.Grapher import Grapher
-from webike.util.Utils import smooth, discharge_curr_to_ampere
 
 CYCLE_TYPE_COLORS = {'D': 'r', 'C': 'g', 's': 'm'}
 
@@ -22,7 +24,8 @@ class ChargeGrapher(Grapher):
         charge_values = self.cursor.fetchall()
         charge_values = smooth(charge_values, 'ChargingCurr')
         charge_values = smooth(charge_values, 'DischargeCurr')
-        charge_values = preprocess_soc_func(charge_values, 'soc_smooth')
+        charge_values = differentiate(charge_values, 'soc_smooth', delta_time=timedelta(hours=1))
+        charge_values = smooth(charge_values, 'soc_smooth_diff')
         charge_values = list(charge_values)  # smooth returns an iterator, this forces generation of all elements
 
         self.cursor.execute(

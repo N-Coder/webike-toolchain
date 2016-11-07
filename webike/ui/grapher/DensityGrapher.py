@@ -1,7 +1,7 @@
+from iss4e.util import BraceMessage as __
 from matplotlib.ticker import FuncFormatter, MultipleLocator
 
 from webike.ui.Grapher import Grapher
-from webike.util.Logging import BraceMessage as __
 
 
 class DensityGrapher(Grapher):

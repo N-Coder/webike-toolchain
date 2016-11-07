@@ -3,17 +3,17 @@ import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
+from iss4e.db.mysql import DictCursor, StreamingDictCursor, QualifiedDictCursor
+from iss4e.util import BraceMessage as __
+from iss4e.util import progress
 from tabulate import tabulate
-from webike.util import ActivityDetection
-from webike.util.Constants import IMEIS, STUDY_START, TD0
-from webike.util.DB import DictCursor, StreamingDictCursor, QualifiedDictCursor
-from webike.util.Logging import BraceMessage as __
-from webike.util.Plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
-from webike.util.Utils import progress
+
+from webike.util.activity import ActivityDetection
+from webike.util.constants import IMEIS, STUDY_START, TD0
+from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)-3.3s %(name)-12.12s - %(message)s")
 
 HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc': [], 'final_soc': [],
              'start_weekday': [], 'start_month': []}

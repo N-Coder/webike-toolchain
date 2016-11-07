@@ -1,8 +1,8 @@
 import numpy as np
+from iss4e.util.math import smooth
 from matplotlib import dates as mdates
 
 from webike.ui.Grapher import Grapher
-from webike.util.Utils import smooth
 
 
 class TempGrapher(Grapher):

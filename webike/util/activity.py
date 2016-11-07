@@ -4,8 +4,9 @@ import warnings
 from datetime import timedelta
 from typing import List
 
-from webike.util.Constants import TD0
-from webike.util.Utils import zip_prev
+from iss4e.util import zip_prev
+
+from webike.util.constants import TD0
 
 Cycle = collections.namedtuple('Cycle', ['start', 'end', 'stats', 'reject_reason'])
 

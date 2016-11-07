@@ -6,10 +6,9 @@ import shutil
 from datetime import datetime, timedelta, timezone, time
 
 import requests
+from iss4e.db.mysql import DictCursor
+from iss4e.util import BraceMessage as __
 from metar import Metar
-
-from webike.util.DB import DictCursor
-from webike.util.Logging import BraceMessage as __
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
