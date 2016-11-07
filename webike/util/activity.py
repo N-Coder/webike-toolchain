@@ -11,7 +11,7 @@ from webike.util.constants import TD0
 Cycle = collections.namedtuple('Cycle', ['start', 'end', 'stats', 'reject_reason'])
 
 
-class ActivityDetection:
+class ActivityDetection(object):
     __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
@@ -65,7 +65,7 @@ class ActivityDetection:
             self.discarded_cycles.append(cycle._replace(reject_reason=reject_reason))
 
 
-class MergingActivityDetection(ActivityDetection):
+class MergeMixin(object):
     def store_cycle(self, cycle: Cycle):
         # try to merge with as much previous cycles as possible
         while True:
@@ -88,7 +88,7 @@ class MergingActivityDetection(ActivityDetection):
             if len(last_cycle) < 1: return False
             last_cycle = last_cycle[-1]
 
-        assert self.extract_cycle_time.__func__ != getattr(MergingActivityDetection, 'extract_cycle_time'), \
+        assert self.extract_cycle_time.__func__ != getattr(MergeMixin, 'extract_cycle_time'), \
             "you must override MergingActivityDetection.extract_cycle_time " \
             "when using the default can_merge implementation"
 
