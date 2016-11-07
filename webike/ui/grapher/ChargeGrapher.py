@@ -5,8 +5,8 @@ from iss4e.util.math import smooth, differentiate
 from matplotlib import dates as mdates
 from matplotlib import patches as mpatches
 
-from util.constants import discharge_curr_to_ampere
 from webike.ui.Grapher import Grapher
+from webike.util.constants import discharge_curr_to_ampere
 
 CYCLE_TYPE_COLORS = {'D': 'r', 'C': 'g', 's': 'm'}
 
