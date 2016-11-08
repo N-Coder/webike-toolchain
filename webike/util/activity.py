@@ -5,7 +5,6 @@ from datetime import timedelta
 from typing import List
 
 from iss4e.util import zip_prev
-
 from webike.util.constants import TD0
 
 Cycle = collections.namedtuple('Cycle', ['start', 'end', 'stats', 'reject_reason'])
@@ -69,10 +68,10 @@ class MergeMixin(object):
     def store_cycle(self, cycle: Cycle):
         # try to merge with as much previous cycles as possible
         while True:
-            if self.can_merge(self.cycles, cycle):
+            if self.cycles and self.can_merge(self.cycles[-1], cycle):
                 merge_with = self.cycles[-1]
                 del self.cycles[-1]
-            elif self.can_merge(self.discarded_cycles, cycle):
+            elif self.discarded_cycles and self.can_merge(self.discarded_cycles[-1], cycle):
                 merge_with = self.discarded_cycles[-1]
                 del self.discarded_cycles[-1]
             else:
@@ -82,12 +81,7 @@ class MergeMixin(object):
         # and then store again
         super().store_cycle(cycle)
 
-    def can_merge(self, last_cycle, new_cycle: Cycle):
-        # if last_cycle is actually a list, use the last value
-        if isinstance(last_cycle, collections.Sequence) and not isinstance(last_cycle, tuple):
-            if len(last_cycle) < 1: return False
-            last_cycle = last_cycle[-1]
-
+    def can_merge(self, last_cycle: Cycle, new_cycle: Cycle):
         assert self.extract_cycle_time.__func__ != getattr(MergeMixin, 'extract_cycle_time'), \
             "you must override MergingActivityDetection.extract_cycle_time " \
             "when using the default can_merge implementation"
