@@ -7,7 +7,6 @@ import numpy as np
 from iss4e.db.mysql import DictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
-
 from webike.data import WeatherGC
 from webike.data import WeatherWU
 from webike.util.constants import IMEIS
@@ -35,21 +34,26 @@ def preprocess_trips(connection):
                                nr + 1, len(unprocessed_trips), imei, trip['id']))
 
                 cursor.execute(
-                    "SELECT datetime, ABS(TIMESTAMPDIFF(SECOND, datetime, '{}')) AS diff "  # FIMXE check time zone
+                    "SELECT datetime, ABS(TIMESTAMPDIFF(SECOND, datetime, '{}')) AS diff "
                     "FROM webike_sfink.weather ORDER BY diff LIMIT 1"
                         .format(trip['start_time']))
                 weather_sample = cursor.fetchone()
                 cursor.execute(
-                    "SELECT stamp, ABS(TIMESTAMPDIFF(SECOND, stamp, '{}')) AS diff "  # FIMXE check time zone
+                    "SELECT stamp, ABS(TIMESTAMPDIFF(SECOND, stamp, '{}')) AS diff "
                     "FROM webike_sfink.weather_metar ORDER BY diff LIMIT 1"
                         .format(trip['start_time']))
                 metar_sample = cursor.fetchone()
 
+                cursor.execute(
+                    "SELECT AVG(TempBox) AS avg_temp FROM imei{} WHERE Stamp >= '{}' AND Stamp <= '{}'"
+                        .format(imei, trip['start_time'], trip['end_time']))
+                avg_temp = cursor.fetchone()
+
                 res = cursor.execute(
-                    "INSERT INTO webike_sfink.trips(imei, trip, start_time, end_time, distance, weather, metar) VALUES "
-                    "(%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO webike_sfink.trips(imei, trip, start_time, end_time, distance, weather, metar, avg_temp) VALUES "
+                    "(%s,%s,%s,%s,%s,%s,%s,%s)",
                     (imei, trip['id'], trip['start_time'], trip['end_time'], trip['distance'],
-                     weather_sample['datetime'], metar_sample['stamp']))
+                     weather_sample['datetime'], metar_sample['stamp'], avg_temp['avg_temp']))
                 if res != 1:
                     raise AssertionError("Illegal result {} for row #{}: {}".format(res, nr, trip))
 
@@ -83,8 +87,8 @@ def extract_hist(connection):
                 hist_data['durations'].append(
                     (trip['last_sample.Stamp'] - trip['first_sample.Stamp']) / timedelta(minutes=1))
 
-                if trip['last_sample.TempBox'] is not None:
-                    hist_data['trip_temp'].append(float(trip['last_sample.TempBox']))
+                if trip['trip.avg_temp'] is not None:
+                    hist_data['trip_temp'].append(float(trip['trip.avg_temp']))
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
