@@ -151,42 +151,42 @@ def extract_hist(connection):
         return hist_data
 
 
-def plot_charge_cycles(hist_data):
-    logger.info("Plotting charge cycle graphs")
+def plot_charge_cycles(hist_data, suffix=""):
+    logger.info("Plotting charge cycle graphs {}".format(suffix))
     plt.clf()
     hist_day_hours(plt.gca(), hist_data['start_times'])
     plt.xlabel("Time of Day")
     plt.ylabel("Number of started Charge Cycles")
     plt.title("Number of started Charge Cycles per Hour of Day")
-    plt.savefig("out/charge_start_per_hour.png")
+    plt.savefig("out/charge_start_per_hour{}.png".format(suffix))
 
     plt.clf()
     hist_day_hours(plt.gca(), hist_data['end_times'])
     plt.xlabel("Time of Day")
     plt.ylabel("Number of ended Charge Cycles")
     plt.title("Number of ended Charge Cycles per Hour of Day")
-    plt.savefig("out/charge_end_per_hour.png")
+    plt.savefig("out/charge_end_per_hour{}.png".format(suffix))
 
     plt.clf()
     hist_week_days(plt.gca(), hist_data['start_weekday'])
     plt.xlabel("Weekday")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Weekday")
-    plt.savefig("out/charge_per_weekday.png")
+    plt.savefig("out/charge_per_weekday{}.png".format(suffix))
 
     plt.clf()
     hist_year_months(plt.gca(), hist_data['start_month'])
     plt.xlabel("Month")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Month")
-    plt.savefig("out/charge_per_month.png")
+    plt.savefig("out/charge_per_month{}.png".format(suffix))
 
     plt.clf()
     plt.hist([x / timedelta(minutes=1) for x in hist_data['durations']], range=(0, 1800), bins=18)
     plt.xlabel("Duration in Minutes")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Duration")
-    plt.savefig("out/charge_per_duration.png")
+    plt.savefig("out/charge_per_duration{}.png".format(suffix))
 
     plt.clf()
     bins = np.linspace(
@@ -199,4 +199,4 @@ def plot_charge_cycles(hist_data):
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles with certain Initial and Final State of Charge")
     plt.legend(loc='upper left')
-    plt.savefig("out/charge_per_soc.png")
+    plt.savefig("out/charge_per_soc{}.png".format(suffix))
