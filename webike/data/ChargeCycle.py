@@ -3,14 +3,14 @@ import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
+import numpy as np
 from iss4e.db.mysql import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
 from tabulate import tabulate
-
 from webike.util.activity import ActivityDetection
 from webike.util.constants import IMEIS, STUDY_START, TD0
-from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
+from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, order_hists
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -187,3 +187,16 @@ def plot_charge_cycles(hist_data):
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Duration")
     plt.savefig("out/charge_per_duration.png")
+
+    plt.clf()
+    bins = np.linspace(
+        min(hist_data['initial_soc'] + hist_data['final_soc']),
+        max(hist_data['initial_soc'] + hist_data['final_soc']), 30)
+    hist_initial = plt.hist(hist_data['initial_soc'], bins=bins, label='initial')
+    hist_final = plt.hist(hist_data['final_soc'], bins=bins, label='final')
+    order_hists([hist_initial, hist_final])
+    plt.xlabel("SoC")
+    plt.ylabel("Number of Charge Cycles")
+    plt.title("Number of Charge Cycles with certain Initial and Final State of Charge")
+    plt.legend(loc='upper left')
+    plt.savefig("out/charge_per_soc.png")
