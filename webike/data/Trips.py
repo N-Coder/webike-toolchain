@@ -45,7 +45,8 @@ def preprocess_trips(connection):
                 metar_sample = cursor.fetchone()
 
                 cursor.execute(
-                    "SELECT AVG(TempBox) AS avg_temp FROM imei{} WHERE Stamp >= '{}' AND Stamp <= '{}'"
+                    "SELECT AVG(TempBox) AS avg_temp FROM imei{} "
+                    "WHERE Stamp >= '{}' + INTERVAL 5 MINUTE AND Stamp <= '{}'"
                         .format(imei, trip['start_time'], trip['end_time']))
                 avg_temp = cursor.fetchone()
 
