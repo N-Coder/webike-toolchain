@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import IndexLocator, FuncFormatter
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -29,15 +30,24 @@ def hist_day_hours(ax, times):
 
 def hist_year_months(ax, months):
     ax.hist(months, **BINS_YEAR_MONTHS)
-    # ax.xaxis.set_major_formatter(
-    #     FixedFormatter(["X", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]))
-    ax.set_xlim(0.5, 11.5)
+    ax.xaxis.set_major_locator(IndexLocator(1, 0.5))
+    ax.xaxis.set_ticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+    ax.set_xlim(0.5, 12.5)
 
 
 def hist_week_days(ax, weekdays):
     ax.hist(weekdays, **BINS_WEEK_DAYS)
-    # ax.xaxis.set_major_formatter(FixedFormatter(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]))
+    ax.xaxis.set_major_locator(IndexLocator(1, -0.5))
+    ax.xaxis.set_ticklabels(["X", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     ax.set_xlim(-0.5, 6.5)
+
+
+def hist_duration_minutes(ax, durations, interval=60, count=12, fmt=lambda x, pos: str(int(x / 60))):
+    limits = (0, count * interval)
+    ax.hist(durations, range=limits, bins=count)
+    ax.xaxis.set_major_locator(IndexLocator(interval, 0))
+    ax.xaxis.set_major_formatter(FuncFormatter(fmt))
+    ax.set_xlim(limits)
 
 
 def plot_weather(hist_datasets, out_file=None, fig_offset=None):

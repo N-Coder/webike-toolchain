@@ -7,10 +7,12 @@ import numpy as np
 from iss4e.db.mysql import DictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
+from matplotlib.ticker import MaxNLocator
 from webike.data import WeatherGC
 from webike.data import WeatherWU
 from webike.util.constants import IMEIS
-from webike.util.plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days
+from webike.util.plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, \
+    hist_duration_minutes
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -116,6 +118,7 @@ def plot_trips(hist_data):
     plt.xlabel("Time of Day")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Hour of Day")
+    plt.tight_layout()
     plt.savefig("out/trips_per_hour.png")
 
     plt.clf()
@@ -123,6 +126,7 @@ def plot_trips(hist_data):
     plt.xlabel("Weekday")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Weekday")
+    plt.tight_layout()
     plt.savefig("out/trips_per_weekday.png")
 
     plt.clf()
@@ -130,27 +134,34 @@ def plot_trips(hist_data):
     plt.xlabel("Month")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Month")
+    plt.tight_layout()
     plt.savefig("out/trips_per_month.png")
 
     plt.clf()
-    plt.hist(hist_data['distances'], range=(0, 15), bins=15)
+    plt.hist(hist_data['distances'], range=(0, 100), bins=20)
+    plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=20))
+    plt.xlim(0, 100)
     plt.xlabel("Distance in km")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Distance")
+    plt.tight_layout()
     plt.savefig("out/trips_per_distance.png")
 
     plt.clf()
-    plt.hist(hist_data['trip_temp'], bins=25)
+    plt.hist(hist_data['trip_temp'], range=(-25, 30), bins=25)
+    plt.xlim(-25, 35)
     plt.xlabel("Box Temperature °C")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Temperature")
+    plt.tight_layout()
     plt.savefig("out/trips_per_temperature.png")
 
     plt.clf()
-    plt.hist(hist_data['durations'], range=(0, 180), bins=18)
+    hist_duration_minutes(plt.gca(), hist_data['durations'], interval=10, count=18, fmt=lambda x, pos: str(int(x)))
     plt.xlabel("Duration in Minutes")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Duration")
+    plt.tight_layout()
     plt.savefig("out/trips_per_duration.png")
 
     plt.clf()
@@ -160,8 +171,10 @@ def plot_trips(hist_data):
     hist_initial = plt.hist(hist_data['initial_soc'], bins=bins, label='initial')
     hist_final = plt.hist(hist_data['final_soc'], bins=bins, label='final')
     order_hists([hist_initial, hist_final])
+    plt.xlim(0, 100)
     plt.xlabel("SoC")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips with certain Initial and Final State of Charge")
     plt.legend(loc='upper left')
+    plt.tight_layout()
     plt.savefig("out/trips_per_soc.png")
