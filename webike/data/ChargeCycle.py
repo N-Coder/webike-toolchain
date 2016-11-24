@@ -21,8 +21,11 @@ HIST_DATA = {'start_times': [], 'end_times': [], 'durations': [], 'initial_soc':
 
 
 class ChargeCycleDetection(ActivityDetection):
-    def __init__(self, attr, min_sample_count=100, min_cycle_duration=timedelta(minutes=10)):
+    def __init__(self, attr, sql_attr=None, min_sample_count=100, min_cycle_duration=timedelta(minutes=10)):
         self.attr = attr
+        if not sql_attr:
+            sql_attr = attr
+        self.sql_attr = sql_attr
         self.min_sample_count = min_sample_count
         self.min_cycle_duration = min_cycle_duration
         super().__init__()
@@ -89,7 +92,7 @@ def preprocess_cycles(connection, detector: ChargeCycleDetection, type=None):
                     JOIN webike_sfink.soc ON Stamp = time AND imei = '{imei}'
                     WHERE {attr} IS NOT NULL AND {attr} != 0 AND Stamp >= '{start_time}'
                     ORDER BY Stamp ASC"""
-                        .format(imei=imei, attr=detector.attr, start_time=start_time))
+                        .format(imei=imei, attr=detector.sql_attr, start_time=start_time))
                 charge = scursor.fetchall_unbuffered()
 
                 logger.info(__("Detecting charging cycles after {} using {}", start_time, detector))

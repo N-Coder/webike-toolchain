@@ -3,7 +3,6 @@ from datetime import timedelta
 from iss4e.db import mysql
 from iss4e.util.config import load_config
 from iss4e.util.math import smooth, smooth_reset_stale, differentiate
-
 from webike.data import SoC
 from webike.data import Trips
 from webike.data import WeatherGC
@@ -26,7 +25,7 @@ class ChargingCurrCCDetection(ChargeCycleDetection):
 
 class DischargeCurrCCDetection(ChargeCycleDetection):
     def __init__(self, *args, **kwargs):
-        super().__init__('DischargeCurr_smooth', *args, **kwargs)
+        super().__init__('DischargeCurr_smooth', sql_attr='DischargeCurr', *args, **kwargs)
 
     def is_start(self, sample, previous):
         return sample[self.attr] < 490
@@ -41,7 +40,7 @@ class DischargeCurrCCDetection(ChargeCycleDetection):
 
 class SoCDerivCCDetection(ChargeCycleDetection):
     def __init__(self, *args, **kwargs):
-        super().__init__('soc_smooth_diff', *args, **kwargs)
+        super().__init__('soc_smooth_diff', sql_attr='soc_smooth', *args, **kwargs)
 
     def is_start(self, sample, previous):
         return sample[self.attr] > 8
