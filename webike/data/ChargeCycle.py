@@ -8,7 +8,7 @@ from iss4e.db.mysql import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
 from tabulate import tabulate
-from webike.util.activity import ActivityDetection
+from webike.util.activity import ActivityDetection, Cycle
 from webike.util.constants import IMEIS, STUDY_START, TD0
 from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, order_hists, \
     hist_duration_minutes
@@ -38,11 +38,10 @@ class ChargeCycleDetection(ActivityDetection):
         accumulator['cnt'] += 1
         return accumulator
 
-    def check_reject_reason(self, cycle):
-        cycle_start, cycle_end, cycle_acc = cycle
-        if cycle_acc['cnt'] < self.min_sample_count:
+    def check_reject_reason(self, cycle: Cycle):
+        if cycle.stats['cnt'] < self.min_sample_count:
             return "acc_cnt<{}".format(self.min_sample_count)
-        elif self.get_duration(cycle_start, cycle_end) < self.min_cycle_duration:
+        elif self.get_duration(cycle.start, cycle.end) < self.min_cycle_duration:
             return "duration<{}".format(self.min_cycle_duration)
         else:
             return None
