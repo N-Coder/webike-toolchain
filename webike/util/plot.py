@@ -5,6 +5,7 @@ from datetime import datetime, time, timedelta
 
 import matplotlib.pyplot as plt
 import numpy as np
+from iss4e.util import BraceMessage as __
 from matplotlib.ticker import IndexLocator, FuncFormatter
 
 __author__ = "Niko Fink"
@@ -23,20 +24,24 @@ def to_hour_bin(dt):
     return datetime.combine(BIN_HOUR_DATE.date(), dt)
 
 
+def normed(hist_data):
+    return np.ones_like(hist_data) / len(hist_data)
+
+
 def hist_day_hours(ax, times):
-    ax.hist(times, **BINS_DAY_HOURS)
+    ax.hist(times, weights=normed(times), **BINS_DAY_HOURS)
     ax.set_xlim([t - timedelta(minutes=30) for t in BIN_DAY_HOURS_LIM])
 
 
 def hist_year_months(ax, months):
-    ax.hist(months, **BINS_YEAR_MONTHS)
+    ax.hist(months, weights=normed(months), **BINS_YEAR_MONTHS)
     ax.xaxis.set_major_locator(IndexLocator(1, 0.5))
     ax.xaxis.set_ticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
     ax.set_xlim(0.5, 12.5)
 
 
 def hist_week_days(ax, weekdays):
-    ax.hist(weekdays, **BINS_WEEK_DAYS)
+    ax.hist(weekdays, weights=normed(weekdays), **BINS_WEEK_DAYS)
     ax.xaxis.set_major_locator(IndexLocator(1, -0.5))
     ax.xaxis.set_ticklabels(["X", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
     ax.set_xlim(-0.5, 6.5)
@@ -44,10 +49,23 @@ def hist_week_days(ax, weekdays):
 
 def hist_duration_minutes(ax, durations, interval=60, count=12, fmt=lambda x, pos: str(int(x / 60))):
     limits = (0, count * interval)
-    ax.hist(durations, range=limits, bins=count)
+    ax.hist(durations, range=limits, bins=count, weights=normed(durations))
     ax.xaxis.set_major_locator(IndexLocator(interval, 0))
     ax.xaxis.set_major_formatter(FuncFormatter(fmt))
     ax.set_xlim(limits)
+
+
+def hist_socs(initial_soc, final_soc):
+    min_soc = min(initial_soc + final_soc)
+    max_soc = max(initial_soc + final_soc)
+    logger.debug(__("SoC range: {}", (min_soc, max_soc)))
+    bins = np.linspace(min_soc, max_soc, 30)
+    hist_initial = plt.hist(initial_soc, bins=bins, label='initial',
+                            weights=normed(initial_soc))
+    hist_final = plt.hist(final_soc, bins=bins, label='final', weights=normed(final_soc))
+    order_hists([hist_initial, hist_final])
+    plt.xlim(min_soc, max_soc)
+    return hist_initial, hist_final
 
 
 def plot_weather(hist_datasets, out_file=None, fig_offset=None):

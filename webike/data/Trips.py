@@ -3,7 +3,6 @@ import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
-import numpy as np
 from iss4e.db.mysql import DictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
@@ -11,8 +10,8 @@ from matplotlib.ticker import MaxNLocator
 from webike.data import WeatherGC
 from webike.data import WeatherWU
 from webike.util.constants import IMEIS
-from webike.util.plot import order_hists, to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, \
-    hist_duration_minutes
+from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, \
+    hist_duration_minutes, hist_socs, normed
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -92,6 +91,8 @@ def extract_hist(connection):
 
                 if trip['trip.avg_temp'] is not None:
                     hist_data['trip_temp'].append(float(trip['trip.avg_temp']))
+                elif trip['last_sample.TempBox'] is not None:
+                    hist_data['trip_temp'].append(float(trip['last_sample.TempBox']))
 
                 if trip['trip.distance'] is not None:
                     hist_data['distances'].append(float(trip['trip.distance']))
@@ -115,6 +116,7 @@ def plot_trips(hist_data):
     logger.info("Plotting trip graphs")
     plt.clf()
     hist_day_hours(plt.gca(), hist_data['start_times'])
+    plt.ylim(0, 0.12)
     plt.xlabel("Time of Day")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Hour of Day")
@@ -123,6 +125,7 @@ def plot_trips(hist_data):
 
     plt.clf()
     hist_week_days(plt.gca(), hist_data['start_weekday'])
+    plt.ylim(0, 0.2)
     plt.xlabel("Weekday")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Weekday")
@@ -131,6 +134,7 @@ def plot_trips(hist_data):
 
     plt.clf()
     hist_year_months(plt.gca(), hist_data['start_month'])
+    plt.ylim(0, 0.2)
     plt.xlabel("Month")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Month")
@@ -138,8 +142,9 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_month.png")
 
     plt.clf()
-    plt.hist(hist_data['distances'], range=(0, 100), bins=20)
+    plt.hist(hist_data['distances'], range=(0, 100), bins=20, weights=normed(hist_data['distances']))
     plt.gca().xaxis.set_major_locator(MaxNLocator(nbins=20))
+    plt.ylim(0, 0.9)
     plt.xlim(0, 100)
     plt.xlabel("Distance in km")
     plt.ylabel("Number of Trips")
@@ -148,7 +153,8 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_distance.png")
 
     plt.clf()
-    plt.hist(hist_data['trip_temp'], range=(-25, 30), bins=25)
+    plt.hist(hist_data['trip_temp'], range=(-25, 30), bins=25, weights=normed(hist_data['trip_temp']))
+    plt.ylim(0, 0.15)
     plt.xlim(-25, 35)
     plt.xlabel("Box Temperature °C")
     plt.ylabel("Number of Trips")
@@ -158,6 +164,7 @@ def plot_trips(hist_data):
 
     plt.clf()
     hist_duration_minutes(plt.gca(), hist_data['durations'], interval=10, count=18, fmt=lambda x, pos: str(int(x)))
+    plt.ylim(0, 0.5)
     plt.xlabel("Duration in Minutes")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips per Duration")
@@ -165,13 +172,8 @@ def plot_trips(hist_data):
     plt.savefig("out/trips_per_duration.png")
 
     plt.clf()
-    bins = np.linspace(
-        min(hist_data['initial_soc'] + hist_data['final_soc']),
-        max(hist_data['initial_soc'] + hist_data['final_soc']), 30)
-    hist_initial = plt.hist(hist_data['initial_soc'], bins=bins, label='initial')
-    hist_final = plt.hist(hist_data['final_soc'], bins=bins, label='final')
-    order_hists([hist_initial, hist_final])
-    plt.xlim(0, 100)
+    hist_socs(hist_data['initial_soc'], hist_data['final_soc'])
+    plt.ylim(0, 0.3)
     plt.xlabel("SoC")
     plt.ylabel("Number of Trips")
     plt.title("Number of Trips with certain Initial and Final State of Charge")

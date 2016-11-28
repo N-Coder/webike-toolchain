@@ -3,15 +3,14 @@ import logging
 from datetime import timedelta
 
 import matplotlib.pyplot as plt
-import numpy as np
 from iss4e.db.mysql import DictCursor, StreamingDictCursor, QualifiedDictCursor
 from iss4e.util import BraceMessage as __
 from iss4e.util import progress
 from tabulate import tabulate
 from webike.util.activity import ActivityDetection, Cycle
 from webike.util.constants import IMEIS, STUDY_START, TD0
-from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, order_hists, \
-    hist_duration_minutes
+from webike.util.plot import to_hour_bin, hist_day_hours, hist_year_months, hist_week_days, hist_duration_minutes, \
+    hist_socs
 
 __author__ = "Niko Fink"
 logger = logging.getLogger(__name__)
@@ -158,6 +157,7 @@ def plot_charge_cycles(hist_data, suffix=""):
     logger.info("Plotting charge cycle graphs {}".format(suffix))
     plt.clf()
     hist_day_hours(plt.gca(), hist_data['start_times'])
+    plt.ylim(0, 0.11)
     plt.xlabel("Time of Day")
     plt.ylabel("Number of started Charge Cycles")
     plt.title("Number of started Charge Cycles per Hour of Day")
@@ -166,6 +166,7 @@ def plot_charge_cycles(hist_data, suffix=""):
 
     plt.clf()
     hist_day_hours(plt.gca(), hist_data['end_times'])
+    plt.ylim(0, 0.11)
     plt.xlabel("Time of Day")
     plt.ylabel("Number of ended Charge Cycles")
     plt.title("Number of ended Charge Cycles per Hour of Day")
@@ -174,6 +175,7 @@ def plot_charge_cycles(hist_data, suffix=""):
 
     plt.clf()
     hist_week_days(plt.gca(), hist_data['start_weekday'])
+    plt.ylim(0, 0.2)
     plt.xlabel("Weekday")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Weekday")
@@ -182,6 +184,7 @@ def plot_charge_cycles(hist_data, suffix=""):
 
     plt.clf()
     hist_year_months(plt.gca(), hist_data['start_month'])
+    plt.ylim(0, 0.15)
     plt.xlabel("Month")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Month")
@@ -190,6 +193,7 @@ def plot_charge_cycles(hist_data, suffix=""):
 
     plt.clf()
     hist_duration_minutes(plt.gca(), [x / timedelta(minutes=1) for x in hist_data['durations']])
+    plt.ylim(0, 0.32)
     plt.xlabel("Duration in Hours")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles per Duration")
@@ -197,13 +201,8 @@ def plot_charge_cycles(hist_data, suffix=""):
     plt.savefig("out/charge_per_duration{}.png".format(suffix))
 
     plt.clf()
-    bins = np.linspace(
-        min(hist_data['initial_soc'] + hist_data['final_soc']),
-        max(hist_data['initial_soc'] + hist_data['final_soc']), 30)
-    hist_initial = plt.hist(hist_data['initial_soc'], bins=bins, label='initial')
-    hist_final = plt.hist(hist_data['final_soc'], bins=bins, label='final')
-    order_hists([hist_initial, hist_final])
-    plt.xlim(0, 100)
+    hist_socs(hist_data['initial_soc'], hist_data['final_soc'])
+    plt.ylim(0, 0.7)
     plt.xlabel("SoC")
     plt.ylabel("Number of Charge Cycles")
     plt.title("Number of Charge Cycles with certain Initial and Final State of Charge")
