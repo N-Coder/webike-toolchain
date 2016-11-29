@@ -34,7 +34,7 @@ def preprocess_trips(connection):
 
                 cursor.execute(
                     "SELECT AVG(TempBox) AS avg_temp FROM imei{} "
-                    "WHERE Stamp >= '{}' + INTERVAL 5 MINUTE AND Stamp <= '{}'"
+                    "WHERE Stamp >= '{}' + INTERVAL 5 MINUTE AND Stamp <= '{}' AND BatteryVoltage > 0"
                         .format(imei, trip['start_time'], trip['end_time']))
                 avg_temp = cursor.fetchone()
 

@@ -2,12 +2,9 @@ from datetime import timedelta
 
 from iss4e.db import mysql
 from iss4e.util.config import load_config
-from iss4e.util.math import smooth, smooth_reset_stale, differentiate
-from webike.data import SoC
-from webike.data import Trips
-from webike.data import WeatherGC
-from webike.data import WeatherWU
-from webike.data.ChargeCycle import preprocess_cycles, ChargeCycleDetection
+from iss4e.util.math import differentiate, smooth, smooth_reset_stale
+from webike.data import SoC, Trips, WeatherGC, WeatherWU
+from webike.data.ChargeCycle import ChargeCycleDetection, preprocess_cycles
 
 __author__ = "Niko Fink"
 
@@ -35,7 +32,7 @@ class DischargeCurrCCDetection(ChargeCycleDetection):
 
     def __call__(self, cycle_samples):
         cycle_samples = smooth(cycle_samples, 'DischargeCurr', is_valid=smooth_reset_stale(timedelta(minutes=5)))
-        return super()(cycle_samples)
+        return super().__call__(cycle_samples)
 
 
 class SoCDerivCCDetection(ChargeCycleDetection):
@@ -50,7 +47,7 @@ class SoCDerivCCDetection(ChargeCycleDetection):
 
     def __call__(self, cycle_samples):
         cycle_samples = differentiate(cycle_samples, 'soc_smooth', delta_time=timedelta(hours=1))
-        return super()(cycle_samples)
+        return super().__call__(cycle_samples)
 
 
 def main():
