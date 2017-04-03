@@ -97,8 +97,8 @@ def integrate_box(data, i):
 
 
 def integrate_riemann(data, i):
-    i = min(len(vals['riemann_sum']) - 1, i)
-    return vals['riemann_sum'][i] / data['maxwh_riemann']
+    i = min(len(data['riemann_sum']) - 1, i)
+    return data['riemann_sum'][i] / data['maxwh_riemann']
 
 
 for temp, vals in d.items():
